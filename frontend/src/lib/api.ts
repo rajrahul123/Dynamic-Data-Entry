@@ -368,13 +368,41 @@ export async function listAvailableForms(): Promise<AvailableForm[]> {
   return request<AvailableForm[]>('/api/records/forms')
 }
 
+export interface RecordFilter {
+  field: string
+  operator: string
+  value: unknown
+}
+
+export interface SubmissionQueryOptions {
+  limit?: number
+  offset?: number
+  search?: string
+  filters?: RecordFilter[]
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}
+
 export async function listSubmissions(
   formId: number,
-  limit = 20,
-  offset = 0,
+  options: SubmissionQueryOptions = {},
 ): Promise<SubmissionListResponse> {
+  const params = new URLSearchParams()
+  const limits: [string, string | number | undefined][] = [
+    ['limit', options.limit ?? 20],
+    ['offset', options.offset ?? 0],
+    ['search', options.search],
+    ['sort_by', options.sortBy],
+    ['sort_order', options.sortOrder],
+  ]
+  for (const [key, value] of limits) {
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  }
+  if (options.filters && options.filters.length > 0) {
+    params.set('filters', JSON.stringify(options.filters))
+  }
   return request<SubmissionListResponse>(
-    `/api/forms/${formId}/submissions?limit=${limit}&offset=${offset}`,
+    `/api/forms/${formId}/submissions?${params.toString()}`,
   )
 }
 

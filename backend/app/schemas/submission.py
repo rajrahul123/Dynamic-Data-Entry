@@ -12,6 +12,20 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 
+class RecordFilter(BaseModel):
+    """One dynamic filter applied to a form's records.
+
+    ``value`` is intentionally untyped: its interpretation (scalar vs. a
+    ``[low, high]`` range for ``between``) depends on the referenced field's
+    type and is validated by the query service against the live ``FormField``
+    definition.
+    """
+
+    field: str
+    operator: str
+    value: Any
+
+
 class SubmissionCreate(BaseModel):
     data: dict[str, Any] = {}
 

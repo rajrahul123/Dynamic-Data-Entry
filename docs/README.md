@@ -10,5 +10,8 @@ Phase-by-phase working notes for the Dynamic Data Entry Platform.
 - [x] 3 — Dynamic form renderer & submission foundation (generic Submission
   model, dynamic validation, `/forms/:id/submit`)
 - [x] 4 — Submission & record management (record list/detail/edit/delete,
-  role-based access, archived-record lifecycle; search & filter deferred)
-- [ ] 5 — Exports (Excel, CSV, PDF, SQL)
+  role-based access, archived-record lifecycle)
+- [x] 5 — Search, filtering & record querying (server-side dynamic filters for
+  all 11 field types, case-insensitive free-text search, deterministic
+  sorting, filtered pagination; tested on SQLite and real PostgreSQL)
+- [ ] 6 — Exports (Excel, CSV, PDF, SQL)

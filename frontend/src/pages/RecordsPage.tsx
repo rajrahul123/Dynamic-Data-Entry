@@ -12,6 +12,7 @@ import {
   listSubmissions,
 } from '../lib/api'
 import { formatRecordValue } from '../lib/recordFormat'
+import { type AppliedQuery, QueryToolbar } from '../components/records/QueryToolbar'
 
 // Records are rendered entirely from the form definition. At most this many
 // leading fields (sorted by sort_order) become table columns; the complete
@@ -39,6 +40,7 @@ export function RecordsPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [query, setQuery] = useState<AppliedQuery>({ search: undefined, sortOrder: 'desc' })
 
   const canMutate = user?.role === 'admin' || user?.role === 'operator'
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -51,12 +53,19 @@ export function RecordsPage() {
   }, [form])
 
   const load = useCallback(
-    async (targetPage: number) => {
+    async (targetPage: number, currentQuery: AppliedQuery) => {
       setError(null)
       try {
         const [formData, list] = await Promise.all([
           fetchFormDefinition(formId),
-          listSubmissions(formId, PAGE_SIZE, (targetPage - 1) * PAGE_SIZE),
+          listSubmissions(formId, {
+            limit: PAGE_SIZE,
+            offset: (targetPage - 1) * PAGE_SIZE,
+            search: currentQuery.search,
+            filters: currentQuery.filters,
+            sortBy: currentQuery.sortBy,
+            sortOrder: currentQuery.sortOrder,
+          }),
         ])
         setForm(formData)
         setRecords(list.items)
@@ -77,7 +86,7 @@ export function RecordsPage() {
       try {
         const [formData, list] = await Promise.all([
           fetchFormDefinition(formId),
-          listSubmissions(formId, PAGE_SIZE, 0),
+          listSubmissions(formId, { limit: PAGE_SIZE, offset: 0 }),
         ])
         if (cancelled) return
         setForm(formData)
@@ -96,10 +105,17 @@ export function RecordsPage() {
     }
   }, [formId])
 
+  function applyQuery(next: AppliedQuery) {
+    setQuery(next)
+    setPage(1)
+    setLoading(true)
+    void load(1, next)
+  }
+
   async function turnPage(nextPage: number) {
     if (nextPage < 1 || nextPage > totalPages) return
     setLoading(true)
-    await load(nextPage)
+    await load(nextPage, query)
     setLoading(false)
   }
 
@@ -113,9 +129,9 @@ export function RecordsPage() {
       const deletionChangedPage = records.length === 1 && page > 1
       const targetPage = deletionChangedPage ? page - 1 : page
       if (deletionChangedPage) {
-        await load(targetPage)
+        await load(targetPage, query)
       } else {
-        await load(page)
+        await load(page, query)
       }
       setNotice(`Record #${record.id} deleted.`)
     } catch (err) {
@@ -129,7 +145,7 @@ export function RecordsPage() {
     return formatRecordValue(field, record.data[field.field_key])
   }
 
-  if (loading) {
+  if (loading && !form) {
     return <p className="text-sm text-slate-500">Loading records…</p>
   }
 
@@ -192,6 +208,10 @@ export function RecordsPage() {
         <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p>
       )}
 
+      <QueryToolbar form={form} query={query} onApply={applyQuery} />
+
+      {loading && <p className="text-xs text-slate-400">Loading…</p>}
+
       <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
           <thead>
@@ -209,7 +229,9 @@ export function RecordsPage() {
             {records.length === 0 ? (
               <tr>
                 <td colSpan={tableColumns.length + 2} className="px-4 py-8 text-center text-slate-400">
-                  No records yet.
+                  {query.search || (query.filters?.length ?? 0) > 0
+                    ? 'No records match your search or filters.'
+                    : 'No records yet.'}
                 </td>
               </tr>
             ) : (

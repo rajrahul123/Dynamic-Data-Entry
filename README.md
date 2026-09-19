@@ -4,7 +4,7 @@ A generic dynamic data-entry platform where administrators create and publish
 custom forms, data-entry operators fill them in, and submitted records can be
 managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 
-> **Status: Phase 4 — Submission & Record Management.** The
+> **Status: Phase 5 — Search, Filtering & Record Querying.** The
 > repository contains a full-stack foundation with JWT authentication,
 > role-based access control (`admin` / `operator` / `viewer`), an initial-admin
 > CLI, an admin-only user management UI, an admin-only **dynamic form
@@ -12,15 +12,20 @@ managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 > lifecycle, per-type settings validation, drag-and-drop ordering, live
 > preview), **data capture** (any authenticated user can open a published form
 > and submit data, validated dynamically server-side against the field
-> definitions), and now **record management**: paginated record listing,
-> record details, record editing, and record deletion for **any** form, driven
+> definitions), and **record management**: paginated record listing, record
+> details, record editing, and record deletion for **any** form, driven
 > entirely by the dynamic form definition. Admin and operator can view, edit,
 > and delete records; viewer is read-only; anonymous users have no record
 > access. Archived forms keep their historical records viewable/editable/
 > deletable while new submissions remain blocked. Submissions are stored in a
-> generic `submissions` table as JSONB; a RESTRICT foreign key prevents
-> deleting a form that has submissions. Search / filtering / exports are not
-> implemented yet.
+> generic `submissions` table as JSONB. **Phase 5 adds server-side record
+> querying**: case-insensitive free-text search across text-like fields,
+> dynamic per-type filters (text, number, date, time, datetime, select, radio,
+> checkbox) with per-type operator sets (including ranges and `between`),
+> deterministic sorting with stable tie-breakers, and filtered
+> `total`/pagination — all compiled to dialect-correct SQL (`data ->> :key` on
+> PostgreSQL, `json_extract` on SQLite) with bound parameters only, plus a
+> query toolbar in the records UI. Exports are not implemented yet.
 
 ## Architecture
 
@@ -178,18 +183,52 @@ npm run dev                     # http://localhost:5173
 
 | Method | Path | Access | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/forms/{form_id}/submissions` | Any authenticated role | Paginated record list (`limit` 1-100, default 20, `offset`) with `items` / `total` / `limit` / `offset` |
+| `GET` | `/api/forms/{form_id}/submissions` | Any authenticated role | Paginated record list (`limit` 1-100, default 20, `offset`, plus Phase 5 `search`, `filters`, `sort_by`, `sort_order` query params) with `items` / `total` / `limit` / `offset` |
 | `GET` | `/api/forms/{form_id}/submissions/{submission_id}` | Any authenticated role | Record detail (404 for unknown form, unknown submission, or cross-form access) |
 | `PATCH` | `/api/forms/{form_id}/submissions/{submission_id}` | Admin / operator (viewer 403) | Edit a record; reuses the dynamic server-side validation engine (422 invalid) |
 | `DELETE` | `/api/forms/{form_id}/submissions/{submission_id}` | Admin / operator (viewer 403) | Delete a single record; 204 on success |
 | `GET` | `/api/records/forms` | Any authenticated role | Read-only list of published/archived forms for record browsing (no builder access) |
+
+### Phase 5 — Search, filtering & record querying
+
+The list endpoint accepts case-insensitive free-text search, dynamic per-type
+filters, and deterministic sorting. All values are bound parameters; nothing
+is interpolated into SQL.
+
+| Param | Type | Behavior |
+| --- | --- | --- |
+| `search` | `string` | Case-insensitive substring match across text-like fields (`text`, `textarea`, `email`, `phone`, `select`, `radio`), OR-combined |
+| `filters` | `string` (JSON array) | Array of `{ "field": "<field_key>", "operator": "<op>", "value": <any> }`; all filters are AND-combined; 400 for malformed JSON, unknown fields, invalid operators or values |
+| `sort_by` | `field_key` | Sort by a field value; 400 for unknown fields |
+| `sort_order` | `asc` / `desc` | Only meaningful with `sort_by`; default `desc` when omitted; 400 on anything else |
+
+Operator sets per field type (values are always bound parameters):
+
+- **text / textarea / email / phone**: `equals`, `contains`, `starts_with`, `ends_with`
+- **number**: `equals`, `not_equals`, `greater_than`, `greater_than_or_equal`,
+  `less_than`, `less_than_or_equal`, `between` (value `[lo, hi]`)
+- **date**: `equals`, `before`, `after`, `on_or_before`, `on_or_after`, `between`
+- **time**: `equals`, `before`, `after`, `between` (HH:MM precision)
+- **datetime**: `equals`, `before`, `after`, `on_or_before`, `on_or_after`,
+  `between` (minute precision, local naive)
+- **select / radio**: `equals`, `not_equals` (match stored option value or
+  option label)
+- **checkbox**: `equals` (value `true` / `false`)
+
+Sorting always appends deterministic tie-breakers
+(`submitted_at DESC, id DESC`), and missing keys sort to the end. Select
+filters accept the option's stored `value` or its display `label`. The filter
+compilers are dialect-aware: PostgreSQL uses the JSONB `data ->> :key`
+operator, and SQLite uses `json_extract`, so the same endpoint runs on both.
+Temporal ranges compare normalized text (`YYYY-MM-DD`, `HH:MM`,
+`YYYY-MM-DD HH:MM`), so they also hold across SQLite and PostgreSQL.
 
 ## Run the tests
 
 ```bash
 cd backend
 .venv\Scripts\activate
-python -m pytest                # auth, authorization, user, form-builder, and submission tests
+python -m pytest                # auth, authorization, user, form-builder, submission, record-management, and record-query tests (219 passing)
 ```
 
 ## Current project status
@@ -223,6 +262,17 @@ python -m pytest                # auth, authorization, user, form-builder, and s
   views. React UI: `/records` (available forms), `/forms/:id/records`
   (dynamic columns from the form definition, server-side pagination, delete
   confirmation), `/forms/:id/records/:id` (detail), and
-  `/forms/:id/records/:id/edit` (reuses the field renderer). No search or
-  filtering yet.
-- Pending phases: record search / filter, exports.
+  `/forms/:id/records/:id/edit` (reuses the field renderer).
+- Phase 5 complete: server-side record querying on `GET
+  /api/forms/{id}/submissions` — `search` (case-insensitive substring across
+  text-like fields), `filters` (dynamic per-type operators for all 11 field
+  types, AND-combined, 400 on malformed/invalid input), and `sort_by` /
+  `sort_order` with deterministic tie-breakers; filtered totals integrate with
+  `limit` / `offset`. All expressions compile to dialect-correct SQL with
+  bound parameters (PostgreSQL `data ->> :key`, SQLite `json_extract`) and
+  were verified against both a 219-test SQLite suite and 23 live checks on
+  real PostgreSQL 18. The records UI gained a query toolbar (debounced search,
+  a per-type filter builder with `between`/select/checkbox value inputs, sort
+  controls, removable active-filter chips) that resets pagination and
+  shows filtered totals. Exports remain the next phase.
+- Pending phases: record exports (Excel, CSV, PDF, SQL).

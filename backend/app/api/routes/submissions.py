@@ -20,7 +20,7 @@ behavior can never diverge.
 """
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import CurrentOperator, CurrentUser, DbSession
@@ -33,6 +33,13 @@ from app.schemas import (
     SubmissionListResponse,
     SubmissionRead,
     SubmissionUpdate,
+)
+from app.services.record_query import (
+    RecordQueryError,
+    build_filter_clauses,
+    build_order_by,
+    build_search_clause,
+    parse_filters,
 )
 
 router = APIRouter(prefix="/forms", tags=["submissions"])
@@ -155,28 +162,62 @@ def list_submissions(
     user: CurrentUser,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None),
+    filters: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_order: str | None = Query(default=None),
 ) -> dict:
-    """Paginated list of a form's records (any authenticated role)."""
-    form = _load_form(db, form_id)
+    """Paginated list of a form's records (any authenticated role).
 
+    Supports server-side free-text search, dynamic per-type filters, and
+    sorting -- all driven by the form's live ``FormField`` definitions:
+
+    * ``search``   plain-text substring across text-like fields.
+    * ``filters``  URL-encoded JSON array, e.g.
+      ``filters=[{"field":"age","operator":"greater_than","value":18},
+      {"field":"name","operator":"contains","value":"rah"}]``; multiple
+      filters are AND-combined.
+    * ``sort_by``  a form field key; ``sort_order`` ``asc``/``desc``.
+      Without ``sort_by``, records come back newest-first (Phase 4 default).
+    """
+    form = _load_form(db, form_id, load_fields=True)
+
+    try:
+        parsed_filters = parse_filters(filters)
+        where = [
+            Submission.form_id == form.id,
+            *build_filter_clauses(db, form.fields, parsed_filters),
+        ]
+        search_clause = build_search_clause(db, form.fields, search)
+        if search_clause is not None:
+            where.append(search_clause)
+        order_by = build_order_by(db, form.fields, sort_by, sort_order)
+    except RecordQueryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    total_where = and_(*where)
     total = (
         db.scalar(
             select(func.count())
             .select_from(Submission)
-            .where(Submission.form_id == form.id)
+            .where(total_where)
         )
         or 0
     )
 
-    statement = (
-        select(Submission)
-        .where(Submission.form_id == form.id)
-        .options(selectinload(Submission.submitted_by_user))
-        .order_by(Submission.submitted_at.desc(), Submission.id.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    items = [_serialize(submission) for submission in db.scalars(statement)]
+    items = [
+        _serialize(submission)
+        for submission in db.scalars(
+            select(Submission)
+            .where(total_where)
+            .options(selectinload(Submission.submitted_by_user))
+            .order_by(*order_by)
+            .limit(limit)
+            .offset(offset)
+        )
+    ]
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 

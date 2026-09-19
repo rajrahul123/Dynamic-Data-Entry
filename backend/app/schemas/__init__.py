@@ -11,6 +11,7 @@ from app.schemas.form import (
     FormUpdate,
 )
 from app.schemas.submission import (
+    RecordFilter,
     SubmissionCreate,
     SubmissionDetail,
     SubmissionListItem,
@@ -31,6 +32,7 @@ __all__ = [
     "FormRead",
     "FormUpdate",
     "LoginRequest",
+    "RecordFilter",
     "SubmissionCreate",
     "SubmissionDetail",
     "SubmissionListItem",
