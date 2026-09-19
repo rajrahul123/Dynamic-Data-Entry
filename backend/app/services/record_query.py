@@ -31,7 +31,7 @@ from sqlalchemy import Boolean, Float, Text, and_, cast, func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.models import FieldType, FormField, Submission
+from app.models import FieldType, Form, FormField, Submission
 from app.schemas import RecordFilter
 
 TEXT_LIKE_OPERATORS = ("equals", "contains", "starts_with", "ends_with")
@@ -425,3 +425,31 @@ def _ascending(column: ColumnElement) -> Any:
 
 def _descending(column: ColumnElement) -> Any:
     return column.desc()
+
+
+def build_record_query(
+    db: Session,
+    form: Form,
+    search: str | None,
+    filters: str | None,
+    sort_by: str | None,
+    sort_order: str | None,
+) -> tuple[list[ColumnElement], list[ColumnElement]]:
+    """Single entry point for a full (unpaginated) record query.
+
+    Returns ``(where_clauses, order_by_expressions)``. The caller decides how
+    many rows to fetch (pagination for the records list, the export limit for
+    exports) and whether to also run a ``count`` for the same WHERE filter.
+    Raising :class:`RecordQueryError` on malformed input keeps the records
+    list and the export endpoint semantically identical.
+    """
+    parsed_filters = parse_filters(filters)
+    where = [
+        Submission.form_id == form.id,
+        *build_filter_clauses(db, form.fields, parsed_filters),
+    ]
+    search_clause = build_search_clause(db, form.fields, search)
+    if search_clause is not None:
+        where.append(search_clause)
+    order_by = build_order_by(db, form.fields, sort_by, sort_order)
+    return where, order_by

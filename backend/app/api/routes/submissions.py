@@ -19,7 +19,7 @@ exact same engine used for new submissions, so edit behavior and submission
 behavior can never diverge.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -34,13 +34,8 @@ from app.schemas import (
     SubmissionRead,
     SubmissionUpdate,
 )
-from app.services.record_query import (
-    RecordQueryError,
-    build_filter_clauses,
-    build_order_by,
-    build_search_clause,
-    parse_filters,
-)
+from app.services import export_service
+from app.services.record_query import RecordQueryError, build_record_query
 
 router = APIRouter(prefix="/forms", tags=["submissions"])
 
@@ -183,15 +178,14 @@ def list_submissions(
     form = _load_form(db, form_id, load_fields=True)
 
     try:
-        parsed_filters = parse_filters(filters)
-        where = [
-            Submission.form_id == form.id,
-            *build_filter_clauses(db, form.fields, parsed_filters),
-        ]
-        search_clause = build_search_clause(db, form.fields, search)
-        if search_clause is not None:
-            where.append(search_clause)
-        order_by = build_order_by(db, form.fields, sort_by, sort_order)
+        where, order_by = build_record_query(
+            db,
+            form,
+            search=search,
+            filters=filters,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
     except RecordQueryError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
@@ -220,6 +214,53 @@ def list_submissions(
     ]
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/{form_id}/submissions/export")
+def export_submissions(
+    form_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    format: str = Query(...),
+    search: str | None = Query(default=None),
+    filters: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_order: str | None = Query(default=None),
+) -> Response:
+    """Export a form's records as CSV / XLSX / PDF / SQL (any authenticated role).
+
+    Export is a read operation, so the same access rules as the records list
+    apply: admin / operator / viewer may export; anonymous requests are
+    rejected (401); draft forms are not available for exports; published and
+    archived forms are. The Phase 5 query engine is reused verbatim, so
+    ``search`` / ``filters`` / ``sort_by`` / ``sort_order`` behave exactly as
+    on the records page. ``limit`` / ``offset`` are never applied -- every
+    matching record is exported up to the configured safety limit.
+    """
+    form = _load_form(db, form_id, load_fields=True)
+    _require_record_visibility(form)
+
+    try:
+        content, media_type, extension = export_service.generate_export(
+            db,
+            form,
+            format=format,
+            search=search,
+            filters=filters,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+    except (RecordQueryError, export_service.ExportError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    filename = f"{export_service.slugify_filename(form.name, form.id)}-records.{extension}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get(

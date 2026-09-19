@@ -4,7 +4,7 @@ A generic dynamic data-entry platform where administrators create and publish
 custom forms, data-entry operators fill them in, and submitted records can be
 managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 
-> **Status: Phase 5 — Search, Filtering & Record Querying.** The
+> **Status: Phase 6 — Exports (Excel, CSV, PDF, SQL).** The
 > repository contains a full-stack foundation with JWT authentication,
 > role-based access control (`admin` / `operator` / `viewer`), an initial-admin
 > CLI, an admin-only user management UI, an admin-only **dynamic form
@@ -25,7 +25,20 @@ managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 > deterministic sorting with stable tie-breakers, and filtered
 > `total`/pagination — all compiled to dialect-correct SQL (`data ->> :key` on
 > PostgreSQL, `json_extract` on SQLite) with bound parameters only, plus a
-> query toolbar in the records UI. Exports are not implemented yet.
+> query toolbar in the records UI. **Phase 6 adds generic record exports**:
+> any authenticated role can download a form's matching records as CSV
+> (UTF-8 with BOM), Excel `.xlsx` (one ``Records`` worksheet, native values),
+> landscape PDF (wrapped cells, repeated header rows), or portable SQL
+> ``INSERT`` statements. Exports reuse the Phase 5 query engine verbatim, so
+> the current search / filters / sort apply; `limit` / `offset` never apply —
+> every matching record is exported up to a hard `MAX_EXPORT_RECORDS` cap
+> (over-limit → 400, never silent truncation). Columns are driven by the live
+> form definition (`sort_order`, label headers) with `ID`, `Submitted By`,
+> `Submitted At` first; unknown stored keys never become columns (except raw
+> JSON in SQL), select/radio resolve to labels, checkboxes export Yes/No, and
+> missing values export blank. SQL is for inspection/migration only and
+> exports no credentials. A Records-page export menu applies the current query
+> and downloads the file.
 
 ## Architecture
 
@@ -223,12 +236,46 @@ operator, and SQLite uses `json_extract`, so the same endpoint runs on both.
 Temporal ranges compare normalized text (`YYYY-MM-DD`, `HH:MM`,
 `YYYY-MM-DD HH:MM`), so they also hold across SQLite and PostgreSQL.
 
+### Phase 6 — Record exports
+
+`GET /api/forms/{form_id}/submissions/export` is a read operation open to any
+authenticated role (admin / operator / viewer). It mirrors the records list
+exactly: the same `search`, `filters`, `sort_by`, `sort_order` parameters
+(Phase 5 engine), the same access rules (401 anonymous, 400 draft forms,
+published/archived ok), and 400 responses for every invalid query. The
+`format` parameter selects the output:
+
+| `format` | Content | Media type |
+| --- | --- | --- |
+| `csv` | UTF-8 with BOM, RFC-4180 escaping | `text/csv; charset=utf-8` |
+| `xlsx` | single `Records` worksheet, native numbers/dates, styled frozen header | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| `pdf` | landscape letter, wrapped cells, repeated header row | `application/pdf` |
+| `sql` | portable `INSERT INTO submissions (...) VALUES (...)` statements | `application/sql` |
+
+Exports never apply `limit` / `offset` — every matching record is included up
+to `MAX_EXPORT_RECORDS` (10 000). Exceeding the cap returns 400 ("Narrow the
+export with search or filters..."); it is never a silent truncation.
+
+Column layout (all formats): `ID`, `Submitted By`, `Submitted At`, then every
+form field ordered by `sort_order` with the field `label` as the header.
+Missing values export blank; select/radio export the option label (matched by
+stored value or label); checkboxes export `Yes` / `No`. Unknown stored keys
+are **not** added as columns — the SQL format being the only one that emits
+raw `Submission.data` JSON. SQL output is clearly marked *inspection /
+migration only*: it is not a full database backup and it never contains user
+credentials, password hashes, or secrets. The response sets a safe
+`Content-Disposition: attachment; filename="<form-name-slug>-records.ext"`.
+
+The records UI exposes the same surface through an **Export** menu that
+applies the current search/filters/sort (all matching records) and downloads
+the selected file.
+
 ## Run the tests
 
 ```bash
 cd backend
 .venv\Scripts\activate
-python -m pytest                # auth, authorization, user, form-builder, submission, record-management, and record-query tests (219 passing)
+python -m pytest                # auth, authorization, user, form-builder, submission, record-management, record-query, and export tests (256 passing)
 ```
 
 ## Current project status
@@ -274,5 +321,21 @@ python -m pytest                # auth, authorization, user, form-builder, submi
   real PostgreSQL 18. The records UI gained a query toolbar (debounced search,
   a per-type filter builder with `between`/select/checkbox value inputs, sort
   controls, removable active-filter chips) that resets pagination and
-  shows filtered totals. Exports remain the next phase.
-- Pending phases: record exports (Excel, CSV, PDF, SQL).
+  shows filtered totals.
+- Phase 6 complete: generic record exports on `GET
+  /api/forms/{id}/submissions/export` — CSV (UTF-8 BOM), `.xlsx` (single
+  `Records` worksheet, native values), landscape PDF (wrapped cells, repeated
+  header), and portable SQL `INSERT`s; the Phase 5 query engine is reused
+  verbatim so `search` / `filters` / `sort_by` / `sort_order` match the
+  records page and `limit` / `offset` never restrict exports. Columns come
+  from the live form definition (`sort_order`, label headers, `ID` /
+  `Submitted By` / `Submitted At` first); missing values are blank,
+  select/radio export labels, checkboxes export Yes/No, and unknown stored
+  keys never become columns (SQL alone emits raw JSON). A hard
+  `MAX_EXPORT_RECORDS` cap (10,000) returns 400 instead of truncating. SQL
+  output is inspection/migration-only and never contains credentials. A
+  37-test suite (SQLite) and 43 live checks on PostgreSQL 18 cover format
+  validation, authorization, query semantics, escaping/Unicode, Excel/PDF
+  validity, SQL-injection safety, and the limit. The records UI gained an
+  Export menu that applies the current query and downloads the file.
+- Pending phases: none.

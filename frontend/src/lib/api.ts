@@ -383,27 +383,85 @@ export interface SubmissionQueryOptions {
   sortOrder?: 'asc' | 'desc'
 }
 
-export async function listSubmissions(
-  formId: number,
+export type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'sql'
+
+export interface ExportResult {
+  blob: Blob
+  filename: string
+}
+
+export function buildSubmissionQueryParams(
   options: SubmissionQueryOptions = {},
-): Promise<SubmissionListResponse> {
+  withPagination = true,
+): URLSearchParams {
   const params = new URLSearchParams()
-  const limits: [string, string | number | undefined][] = [
-    ['limit', options.limit ?? 20],
-    ['offset', options.offset ?? 0],
+  if (withPagination) {
+    params.set('limit', String(options.limit ?? 20))
+    params.set('offset', String(options.offset ?? 0))
+  }
+  const fields: [string, string | number | undefined][] = [
     ['search', options.search],
     ['sort_by', options.sortBy],
     ['sort_order', options.sortOrder],
   ]
-  for (const [key, value] of limits) {
+  for (const [key, value] of fields) {
     if (value !== undefined && value !== '') params.set(key, String(value))
   }
   if (options.filters && options.filters.length > 0) {
     params.set('filters', JSON.stringify(options.filters))
   }
+  return params
+}
+
+export async function listSubmissions(
+  formId: number,
+  options: SubmissionQueryOptions = {},
+): Promise<SubmissionListResponse> {
   return request<SubmissionListResponse>(
-    `/api/forms/${formId}/submissions?${params.toString()}`,
+    `/api/forms/${formId}/submissions?${buildSubmissionQueryParams(options).toString()}`,
   )
+}
+
+export async function exportSubmissions(
+  formId: number,
+  format: ExportFormat,
+  options: Omit<SubmissionQueryOptions, 'limit' | 'offset'> = {},
+): Promise<ExportResult> {
+  const params = buildSubmissionQueryParams(options, false)
+  params.set('format', format)
+  const token = getToken()
+  const response = await fetch(
+    `/api/forms/${formId}/submissions/export?${params.toString()}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+
+  if (response.status === 401) {
+    setToken(null)
+    window.dispatchEvent(new Event('auth:unauthorized'))
+  }
+
+  if (!response.ok) {
+    let message = `Export failed with status ${response.status}`
+    try {
+      const body: unknown = await response.json()
+      if (
+        typeof body === 'object' &&
+        body !== null &&
+        'detail' in body &&
+        typeof (body as { detail: unknown }).detail === 'string'
+      ) {
+        message = (body as { detail: string }).detail
+      }
+    } catch {
+      // Non-JSON error body; keep the generic message.
+    }
+    throw new ApiError(response.status, message)
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = /filename="([^"]+)"/.exec(disposition)
+  const filename = match ? match[1] : `records.${format}`
+  return { blob: await response.blob(), filename }
 }
 
 export async function fetchSubmission(

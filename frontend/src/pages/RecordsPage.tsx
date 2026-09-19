@@ -12,6 +12,7 @@ import {
   listSubmissions,
 } from '../lib/api'
 import { formatRecordValue } from '../lib/recordFormat'
+import { ExportMenu } from '../components/records/ExportMenu'
 import { type AppliedQuery, QueryToolbar } from '../components/records/QueryToolbar'
 
 // Records are rendered entirely from the form definition. At most this many
@@ -186,6 +187,13 @@ export function RecordsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ExportMenu
+            formId={formId}
+            query={query}
+            disabled={loading}
+            onError={setError}
+            onNotice={setNotice}
+          />
           <Link
             to="/records"
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
