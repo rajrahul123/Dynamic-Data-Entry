@@ -140,12 +140,42 @@ export interface SubmissionCreate {
   data: Record<string, unknown>
 }
 
+export interface SubmissionUpdate {
+  data: Record<string, unknown>
+}
+
 export interface SubmissionResponse {
   id: number
   form_id: number
   submitted_by: number
   data: Record<string, unknown>
   submitted_at: string
+  updated_at: string
+}
+
+export interface SubmissionListItem {
+  id: number
+  form_id: number
+  submitted_by: number
+  submitted_by_username: string | null
+  submitted_by_full_name: string | null
+  data: Record<string, unknown>
+  submitted_at: string
+  updated_at: string
+}
+
+export interface SubmissionListResponse {
+  items: SubmissionListItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface AvailableForm {
+  id: number
+  name: string
+  description: string | null
+  status: FormStatus
   updated_at: string
 }
 
@@ -330,8 +360,44 @@ export async function reorderFields(formId: number, fieldIds: number[]): Promise
   })
 }
 
-export async function fetchPublishedForm(id: number): Promise<Form> {
+export async function fetchFormDefinition(id: number): Promise<Form> {
   return request<Form>(`/api/forms/${id}/definition`)
+}
+
+export async function listAvailableForms(): Promise<AvailableForm[]> {
+  return request<AvailableForm[]>('/api/records/forms')
+}
+
+export async function listSubmissions(
+  formId: number,
+  limit = 20,
+  offset = 0,
+): Promise<SubmissionListResponse> {
+  return request<SubmissionListResponse>(
+    `/api/forms/${formId}/submissions?limit=${limit}&offset=${offset}`,
+  )
+}
+
+export async function fetchSubmission(
+  formId: number,
+  submissionId: number,
+): Promise<SubmissionListItem> {
+  return request<SubmissionListItem>(`/api/forms/${formId}/submissions/${submissionId}`)
+}
+
+export async function updateSubmission(
+  formId: number,
+  submissionId: number,
+  data: Record<string, unknown>,
+): Promise<SubmissionListItem> {
+  return request<SubmissionListItem>(`/api/forms/${formId}/submissions/${submissionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ data } satisfies SubmissionUpdate),
+  })
+}
+
+export async function deleteSubmission(formId: number, submissionId: number): Promise<void> {
+  return request<void>(`/api/forms/${formId}/submissions/${submissionId}`, { method: 'DELETE' })
 }
 
 export async function submitSubmission(

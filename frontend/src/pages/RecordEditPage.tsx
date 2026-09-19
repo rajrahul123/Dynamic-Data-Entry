@@ -5,26 +5,28 @@ import { FieldRenderer } from '../components/forms/FieldRenderer'
 import {
   ApiError,
   type Form,
-  type SubmissionResponse,
+  type SubmissionListItem,
   fetchFormDefinition,
-  submitSubmission,
+  fetchSubmission,
   type ValidationErrorDetail,
+  updateSubmission,
 } from '../lib/api'
 import { validateSubmission } from '../lib/submissionValidation'
 
-export function SubmissionPage() {
-  const { id } = useParams<{ id: string }>()
+export function RecordEditPage() {
+  const { id, submissionId } = useParams<{ id: string; submissionId: string }>()
   const navigate = useNavigate()
   const formId = Number(id)
+  const recordId = Number(submissionId)
 
   const [form, setForm] = useState<Form | null>(null)
+  const [record, setRecord] = useState<SubmissionListItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [submission, setSubmission] = useState<SubmissionResponse | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const fields = useMemo(
     () => (form ? [...form.fields].sort((a, b) => a.sort_order - b.sort_order) : []),
@@ -46,19 +48,20 @@ export function SubmissionPage() {
   useEffect(() => {
     let cancelled = false
 
-    async function loadForm() {
+    async function load() {
       try {
-        const data = await fetchFormDefinition(formId)
+        const [formData, recordData] = await Promise.all([
+          fetchFormDefinition(formId),
+          fetchSubmission(formId, recordId),
+        ])
         if (cancelled) return
-        setForm(data)
+        setForm(formData)
+        setRecord(recordData)
+        // Only keys present in the stored record are edited; current field
+        // definitions stay authoritative on the server.
         const initial: Record<string, unknown> = {}
-        for (const field of data.fields) {
-          if (field.default_value !== null && field.default_value !== '') {
-            initial[field.field_key] =
-              field.field_type === 'checkbox'
-                ? field.default_value === 'true'
-                : field.default_value
-          }
+        for (const key of Object.keys(recordData.data)) {
+          initial[key] = recordData.data[key]
         }
         setValues(initial)
       } catch (err) {
@@ -68,11 +71,11 @@ export function SubmissionPage() {
       }
     }
 
-    void loadForm()
+    void load()
     return () => {
       cancelled = true
     }
-  }, [formId])
+  }, [formId, recordId])
 
   function handleChange(key: string) {
     return (value: unknown) => {
@@ -81,16 +84,16 @@ export function SubmissionPage() {
     }
   }
 
-  async function handleSubmit() {
+  async function handleSave() {
     setFormError(null)
     const errors = validateSubmission(fields, values)
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) return
 
-    setSubmitting(true)
+    setSaving(true)
     try {
-      const result = await submitSubmission(formId, values)
-      setSubmission(result)
+      await updateSubmission(formId, recordId, values)
+      navigate(`/forms/${formId}/records/${recordId}`)
     } catch (err) {
       if (err instanceof ApiError && Array.isArray(err.detail)) {
         const serverErrors: Record<string, string> = {}
@@ -102,60 +105,26 @@ export function SubmissionPage() {
       }
       setFormError(err instanceof Error ? err.message : String(err))
     } finally {
-      setSubmitting(false)
+      setSaving(false)
     }
   }
 
-  if (submission) {
-    return (
-      <div className="mx-auto max-w-xl space-y-6">
-        <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm">
-          <h2 className="text-2xl font-bold text-emerald-800">Submission received</h2>
-          <p className="mt-2 text-sm text-emerald-700">
-            Your response to "{form?.name ?? 'this form'}" was recorded (submission #
-            {submission.id}) on {new Date(submission.submitted_at).toLocaleString()}.
-          </p>
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setSubmission(null)
-                setFieldErrors({})
-                setFormError(null)
-              }}
-              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600"
-            >
-              Submit another response
-            </button>
-            <Link
-              to="/dashboard"
-              className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
-            >
-              Back to dashboard
-            </Link>
-          </div>
-        </section>
-      </div>
-    )
-  }
-
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading form…</p>
+    return <p className="text-sm text-slate-500">Loading record…</p>
   }
 
-  if (loadError || !form) {
+  if (loadError || !form || !record) {
     return (
       <div className="mx-auto max-w-xl space-y-4">
         <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-          {loadError ?? 'This form is not available.'}
+          {loadError ?? 'This record is not available.'}
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard')}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        <Link
+          to={`/forms/${formId}/records`}
+          className="inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          Back to dashboard
-        </button>
+          Back to records
+        </Link>
       </div>
     )
   }
@@ -163,8 +132,10 @@ export function SubmissionPage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <header>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">{form.name}</h2>
-        {form.description && <p className="mt-1 text-sm text-slate-600">{form.description}</p>}
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+          Edit record #{record.id}
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">{form.name}</p>
       </header>
 
       {formError && (
@@ -178,7 +149,7 @@ export function SubmissionPage() {
               field={field}
               value={values[field.field_key]}
               onChange={handleChange(field.field_key)}
-              disabled={submitting}
+              disabled={saving}
             />
             {fieldErrors[field.field_key] && (
               <p className="mt-1 text-xs font-medium text-red-600">
@@ -189,14 +160,19 @@ export function SubmissionPage() {
         ))}
 
         <div className="flex items-center justify-between pt-2">
-          <p className="text-xs text-slate-500">Fields marked * are required.</p>
+          <Link
+            to={`/forms/${formId}/records/${recordId}`}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </Link>
           <button
             type="button"
-            disabled={submitting}
-            onClick={() => void handleSubmit()}
+            disabled={saving}
+            onClick={() => void handleSave()}
             className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
           >
-            {submitting ? 'Submitting…' : 'Submit'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </section>

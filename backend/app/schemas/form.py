@@ -182,3 +182,17 @@ class FormRead(BaseModel):
     updated_at: datetime
     published_at: datetime | None
     fields: list[FieldRead] = []
+
+
+class AvailableFormRead(BaseModel):
+    """Read-only form summary for record browsing by non-admin roles.
+
+    Deliberately minimal: only the identity and lifecycle status needed to
+    list a form as a record source. Builder details stay admin-only.
+    """
+
+    id: int
+    name: str
+    description: str | None = None
+    status: FormStatus
+    updated_at: datetime

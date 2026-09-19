@@ -186,6 +186,15 @@ export function FormsPage() {
                           Enter data
                         </button>
                       )}
+                      {(form.status === 'published' || form.status === 'archived') && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/forms/${form.id}/records`)}
+                          className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          View records
+                        </button>
+                      )}
                       {(form.status === 'draft' || form.status === 'published') && (
                         <button
                           type="button"

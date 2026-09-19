@@ -25,3 +25,43 @@ class SubmissionRead(BaseModel):
     data: dict[str, Any]
     submitted_at: datetime
     updated_at: datetime
+
+
+class SubmissionUpdate(BaseModel):
+    """Full replacement of an existing submission's ``data`` payload.
+
+    The replacement is validated server-side against the live ``FormField``
+    definitions exactly like a fresh submission, so the same field rules a
+    phase-3 POST enforces also apply to record edits.
+    """
+
+    data: dict[str, Any] = {}
+
+
+class SubmissionListItem(BaseModel):
+    """Row-shaped submission used by the records list/detail endpoints.
+
+    ``submitted_by_user_*`` fields only expose safe identity information
+    (username, full name). Password hashes and other sensitive user data are
+    never included.
+    """
+
+    id: int
+    form_id: int
+    submitted_by: int
+    submitted_by_username: str | None = None
+    submitted_by_full_name: str | None = None
+    data: dict[str, Any]
+    submitted_at: datetime
+    updated_at: datetime
+
+
+class SubmissionDetail(SubmissionListItem):
+    """Full record detail; shares the list item shape."""
+
+
+class SubmissionListResponse(BaseModel):
+    items: list[SubmissionListItem]
+    total: int
+    limit: int
+    offset: int

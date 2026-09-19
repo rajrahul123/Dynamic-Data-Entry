@@ -31,6 +31,9 @@ export function AppShell() {
             <NavLink to="/dashboard" className={navLinkClass}>
               Dashboard
             </NavLink>
+            <NavLink to="/records" className={navLinkClass}>
+              Records
+            </NavLink>
             {user.role === 'admin' && (
               <>
                 <NavLink to="/forms" className={navLinkClass}>

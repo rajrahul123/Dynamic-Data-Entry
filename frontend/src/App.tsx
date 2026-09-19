@@ -8,6 +8,10 @@ import { FormBuilderPage } from './pages/FormBuilderPage'
 import FormCreatePage from './pages/FormCreatePage'
 import { FormsPage } from './pages/FormsPage'
 import LoginPage from './pages/LoginPage'
+import { RecordDetailPage } from './pages/RecordDetailPage'
+import { RecordEditPage } from './pages/RecordEditPage'
+import { RecordsIndexPage } from './pages/RecordsIndexPage'
+import { RecordsPage } from './pages/RecordsPage'
 import { SubmissionPage } from './pages/SubmissionPage'
 import { UsersPage } from './pages/UsersPage'
 
@@ -58,6 +62,16 @@ function App() {
               }
             />
             <Route path="/forms/:id/submit" element={<SubmissionPage />} />
+            <Route path="/records" element={<RecordsIndexPage />} />
+            <Route path="/forms/:id/records" element={<RecordsPage />} />
+            <Route
+              path="/forms/:id/records/:submissionId"
+              element={<RecordDetailPage />}
+            />
+            <Route
+              path="/forms/:id/records/:submissionId/edit"
+              element={<RecordEditPage />}
+            />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

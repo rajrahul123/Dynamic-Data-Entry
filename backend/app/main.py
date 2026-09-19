@@ -3,7 +3,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth_router, forms_router, health_router, submissions_router, users_router
+from app.api import (
+    auth_router,
+    forms_router,
+    health_router,
+    records_router,
+    submissions_router,
+    users_router,
+)
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -27,6 +34,7 @@ app.include_router(auth_router, prefix="/api", tags=["auth"])
 app.include_router(users_router, prefix="/api", tags=["users"])
 app.include_router(forms_router, prefix="/api", tags=["forms"])
 app.include_router(submissions_router, prefix="/api", tags=["submissions"])
+app.include_router(records_router, prefix="/api", tags=["records"])
 
 
 @app.get("/")

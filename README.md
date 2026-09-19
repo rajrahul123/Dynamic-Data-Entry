@@ -4,17 +4,23 @@ A generic dynamic data-entry platform where administrators create and publish
 custom forms, data-entry operators fill them in, and submitted records can be
 managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 
-> **Status: Phase 3 — Dynamic Form Renderer & Submission Foundation.** The
+> **Status: Phase 4 — Submission & Record Management.** The
 > repository contains a full-stack foundation with JWT authentication,
 > role-based access control (`admin` / `operator` / `viewer`), an initial-admin
 > CLI, an admin-only user management UI, an admin-only **dynamic form
 > builder** (name, description, ordered fields, draft → published → archived
 > lifecycle, per-type settings validation, drag-and-drop ordering, live
-> preview), and now **data capture**: any authenticated user can open a
-> published form and submit data, validated dynamically server-side against the
-> field definitions. Submissions are stored in a generic `submissions` table
-> as JSONB; a RESTRICT foreign key prevents deleting a form that has
-> submissions. Record management / search / export are not implemented yet.
+> preview), **data capture** (any authenticated user can open a published form
+> and submit data, validated dynamically server-side against the field
+> definitions), and now **record management**: paginated record listing,
+> record details, record editing, and record deletion for **any** form, driven
+> entirely by the dynamic form definition. Admin and operator can view, edit,
+> and delete records; viewer is read-only; anonymous users have no record
+> access. Archived forms keep their historical records viewable/editable/
+> deletable while new submissions remain blocked. Submissions are stored in a
+> generic `submissions` table as JSONB; a RESTRICT foreign key prevents
+> deleting a form that has submissions. Search / filtering / exports are not
+> implemented yet.
 
 ## Architecture
 
@@ -84,9 +90,9 @@ Real secrets are never committed; `.env*` files are git-ignored.
 
 | Role | Can do |
 | --- | --- |
-| `admin` | Everything: dashboard, user management (create/update roles/status), form builder, submissions |
-| `operator` | Authenticated access to the dashboard and submissions (form builder is admin-only) |
-| `viewer` | Authenticated, read-only dashboard access and submissions |
+| `admin` | Everything: dashboard, user management (create/update roles/status), form builder, submissions, record management (view / edit / delete) |
+| `operator` | Authenticated access to the dashboard and submissions plus record management (view / edit / delete) |
+| `viewer` | Authenticated, read-only access: dashboard, submissions, and record viewing (no edit / delete) |
 
 ## Run the backend
 
@@ -165,8 +171,18 @@ npm run dev                     # http://localhost:5173
 
 | Method | Path | Access | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/forms/{form_id}/definition` | Any authenticated user | Published-only form definition for building the entry form |
+| `GET` | `/api/forms/{form_id}/definition` | Any authenticated user | Published/archived form definition for building the entry form or record views |
 | `POST` | `/api/forms/{form_id}/submissions` | Any authenticated user | Submit data for a published form; validates dynamically against field definitions (401 anonymous, 404 unknown form, 400 draft/archived, 422 invalid data) |
+
+### Phase 4 — Record management
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/forms/{form_id}/submissions` | Any authenticated role | Paginated record list (`limit` 1-100, default 20, `offset`) with `items` / `total` / `limit` / `offset` |
+| `GET` | `/api/forms/{form_id}/submissions/{submission_id}` | Any authenticated role | Record detail (404 for unknown form, unknown submission, or cross-form access) |
+| `PATCH` | `/api/forms/{form_id}/submissions/{submission_id}` | Admin / operator (viewer 403) | Edit a record; reuses the dynamic server-side validation engine (422 invalid) |
+| `DELETE` | `/api/forms/{form_id}/submissions/{submission_id}` | Admin / operator (viewer 403) | Delete a single record; 204 on success |
+| `GET` | `/api/records/forms` | Any authenticated role | Read-only list of published/archived forms for record browsing (no builder access) |
 
 ## Run the tests
 
@@ -197,4 +213,16 @@ python -m pytest                # auth, authorization, user, form-builder, and s
   (`/forms/:id/submit`) that reuses the field renderer in controlled mode,
   performs client-side validation, and maps server validation errors onto
   individual fields.
-- Pending phases: record management / search / filter, exports.
+- Phase 4 complete: generic record management over the existing
+  `submissions` table — paginated `GET /api/forms/{id}/submissions`, record
+  detail, `PATCH` (full `data` replacement reusing the Phase 3 validation
+  engine) and `DELETE`; admin/operator may mutate, viewer is read-only,
+  anonymous gets 401, cross-form access returns 404. Archived forms retain
+  their records (view/edit/delete) while still rejecting new submissions;
+  `GET /api/forms/{id}/definition` now also serves archived forms for record
+  views. React UI: `/records` (available forms), `/forms/:id/records`
+  (dynamic columns from the form definition, server-side pagination, delete
+  confirmation), `/forms/:id/records/:id` (detail), and
+  `/forms/:id/records/:id/edit` (reuses the field renderer). No search or
+  filtering yet.
+- Pending phases: record search / filter, exports.
