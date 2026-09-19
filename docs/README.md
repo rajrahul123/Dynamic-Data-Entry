@@ -4,8 +4,8 @@ Phase-by-phase working notes for the Dynamic Data Entry Platform.
 
 ## Phases
 
-- [ ] 0 — Project Foundation (full-stack skeleton, PostgreSQL + Alembic wiring)
-- [ ] 1 — Authentication
+- [x] 0 — Project Foundation (full-stack skeleton, PostgreSQL + Alembic wiring)
+- [x] 1 — Authentication & User Management (roles, JWT, admin CLI, user UI)
 - [ ] 2 — Form builder
 - [ ] 3 — Dynamic forms / data entry
 - [ ] 4 — Record management, search & filter

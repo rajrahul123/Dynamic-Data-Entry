@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health_router
+from app.api import auth_router, health_router, users_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -23,6 +23,8 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix="/api", tags=["health"])
+app.include_router(auth_router, prefix="/api", tags=["auth"])
+app.include_router(users_router, prefix="/api", tags=["users"])
 
 
 @app.get("/")
@@ -31,4 +33,6 @@ def root() -> dict[str, str]:
         "name": settings.app_name,
         "docs": "/docs",
         "health": "/api/health",
+        "login": "/api/auth/login",
+        "me": "/api/auth/me",
     }
