@@ -4,6 +4,9 @@ import { AppShell } from './components/AppShell'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './lib/auth'
 import DashboardPage from './pages/DashboardPage'
+import { FormBuilderPage } from './pages/FormBuilderPage'
+import FormCreatePage from './pages/FormCreatePage'
+import { FormsPage } from './pages/FormsPage'
 import LoginPage from './pages/LoginPage'
 import { UsersPage } from './pages/UsersPage'
 
@@ -26,6 +29,30 @@ function App() {
               element={
                 <ProtectedRoute requireAdmin>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/forms"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FormsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/forms/new"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FormCreatePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/forms/:id/edit"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FormBuilderPage />
                 </ProtectedRoute>
               }
             />

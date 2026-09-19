@@ -32,9 +32,14 @@ export function AppShell() {
               Dashboard
             </NavLink>
             {user.role === 'admin' && (
-              <NavLink to="/users" className={navLinkClass}>
-                Users
-              </NavLink>
+              <>
+                <NavLink to="/forms" className={navLinkClass}>
+                  Forms
+                </NavLink>
+                <NavLink to="/users" className={navLinkClass}>
+                  Users
+                </NavLink>
+              </>
             )}
           </div>
           <div className="flex items-center gap-3">

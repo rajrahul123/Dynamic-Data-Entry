@@ -40,6 +40,102 @@ export interface UserUpdate {
   is_active?: boolean
 }
 
+export type FormStatus = 'draft' | 'published' | 'archived'
+
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'email'
+  | 'phone'
+  | 'date'
+  | 'time'
+  | 'datetime'
+  | 'select'
+  | 'radio'
+  | 'checkbox'
+
+export interface FieldOption {
+  label: string
+  value: string
+}
+
+export interface FieldSettings {
+  min_length?: number | null
+  max_length?: number | null
+  min?: number | null
+  max?: number | null
+  step?: number | null
+  options?: FieldOption[] | null
+  checkbox_label?: string | null
+}
+
+export interface FormField {
+  id: number
+  form_id: number
+  field_key: string
+  label: string
+  field_type: FieldType
+  description: string | null
+  placeholder: string | null
+  required: boolean
+  default_value: string | null
+  sort_order: number
+  settings: FieldSettings | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Form {
+  id: number
+  name: string
+  description: string | null
+  status: FormStatus
+  created_by: number
+  created_at: string
+  updated_at: string
+  published_at: string | null
+  fields: FormField[]
+}
+
+export interface FormCreate {
+  name: string
+  description?: string | null
+}
+
+export interface FormUpdate {
+  name?: string
+  description?: string | null
+}
+
+export interface FieldCreate {
+  field_key: string
+  label: string
+  field_type: FieldType
+  description?: string | null
+  placeholder?: string | null
+  required?: boolean
+  default_value?: string | null
+  sort_order?: number | null
+  settings?: FieldSettings | null
+}
+
+export interface FieldUpdate {
+  field_key?: string
+  label?: string
+  field_type?: FieldType
+  description?: string | null
+  placeholder?: string | null
+  required?: boolean
+  default_value?: string | null
+  sort_order?: number | null
+  settings?: FieldSettings | null
+}
+
+export interface FieldReorder {
+  field_ids: number[]
+}
+
 const TOKEN_KEY = 'ddep_access_token'
 
 export class ApiError extends Error {
@@ -76,6 +172,10 @@ async function request<T>(
   }
 
   const response = await fetch(path, { ...options, headers })
+
+  if (response.status === 204) {
+    return undefined as T
+  }
 
   if (response.status === 401 && authenticated) {
     setToken(null)
@@ -139,3 +239,81 @@ export async function updateUser(id: number, patch: UserUpdate): Promise<User> {
     body: JSON.stringify(patch),
   })
 }
+
+export async function listForms(options?: { status?: FormStatus }): Promise<Form[]> {
+  const query = options?.status ? `?status=${options.status}` : ''
+  return request<Form[]>(`/api/forms${query}`)
+}
+
+export async function fetchForm(id: number): Promise<Form> {
+  return request<Form>(`/api/forms/${id}`)
+}
+
+export async function createForm(data: FormCreate): Promise<Form> {
+  return request<Form>('/api/forms', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateForm(id: number, patch: FormUpdate): Promise<Form> {
+  return request<Form>(`/api/forms/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function deleteForm(id: number): Promise<void> {
+  return request<void>(`/api/forms/${id}`, { method: 'DELETE' })
+}
+
+export async function publishForm(id: number): Promise<Form> {
+  return request<Form>(`/api/forms/${id}/publish`, { method: 'POST' })
+}
+
+export async function archiveForm(id: number): Promise<Form> {
+  return request<Form>(`/api/forms/${id}/archive`, { method: 'POST' })
+}
+
+export async function createField(formId: number, data: FieldCreate): Promise<FormField> {
+  return request<FormField>(`/api/forms/${formId}/fields`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateField(
+  formId: number,
+  fieldId: number,
+  patch: FieldUpdate,
+): Promise<FormField> {
+  return request<FormField>(`/api/forms/${formId}/fields/${fieldId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function deleteField(formId: number, fieldId: number): Promise<void> {
+  return request<void>(`/api/forms/${formId}/fields/${fieldId}`, { method: 'DELETE' })
+}
+
+export async function reorderFields(formId: number, fieldIds: number[]): Promise<FormField[]> {
+  return request<FormField[]>(`/api/forms/${formId}/fields/reorder`, {
+    method: 'POST',
+    body: JSON.stringify({ field_ids: fieldIds }),
+  })
+}
+
+export const FIELD_TYPES: { type: FieldType; label: string }[] = [
+  { type: 'text', label: 'Short text' },
+  { type: 'textarea', label: 'Long text' },
+  { type: 'number', label: 'Number' },
+  { type: 'email', label: 'Email' },
+  { type: 'phone', label: 'Phone' },
+  { type: 'date', label: 'Date' },
+  { type: 'time', label: 'Time' },
+  { type: 'datetime', label: 'Date & time' },
+  { type: 'select', label: 'Dropdown' },
+  { type: 'radio', label: 'Choice group' },
+  { type: 'checkbox', label: 'Checkbox' },
+]

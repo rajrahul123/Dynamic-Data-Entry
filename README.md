@@ -4,11 +4,14 @@ A generic dynamic data-entry platform where administrators create and publish
 custom forms, data-entry operators fill them in, and submitted records can be
 managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 
-> **Status: Phase 1 — Authentication & User Management.** The repository
-> contains a full-stack foundation with JWT authentication, role-based access
-> control (`admin` / `operator` / `viewer`), an initial-admin CLI, and an
-> admin-only user management UI. No forms, data entry, records, or export
-> features exist yet.
+> **Status: Phase 2 — Dynamic Form Builder.** The repository contains a
+> full-stack foundation with JWT authentication, role-based access control
+> (`admin` / `operator` / `viewer`), an initial-admin CLI, an admin-only user
+> management UI, and an admin-only **dynamic form builder**: administrators
+> design generic forms (name, description, ordered fields) with a
+> draft → published → archived lifecycle, per-field type and settings
+> validation, drag-and-drop field ordering, and a live preview renderer.
+> Data entry, records, and export features are not implemented yet.
 
 ## Architecture
 
@@ -21,13 +24,13 @@ dynamic-data-entry-platform/
 │       └── pages/       Login, Dashboard, and admin User Management
 ├── backend/             FastAPI + SQLAlchemy + Alembic + Pydantic API
 │   ├── app/
-│   │   ├── api/         Routers: auth, users, health
+│   │   ├── api/         Routers: auth, users, forms
 │   │   │   └── deps.py  Auth/role dependencies (the real security boundary)
 │   │   ├── core/        Settings, database, security (hashing + JWT)
-│   │   ├── models/      Declarative base and User ORM model
+│   │   ├── models/      Declarative base, User, Form, FormField
 │   │   └── schemas/     Pydantic request/response models
 │   ├── scripts/         create_admin.py (initial administrator CLI)
-│   ├── tests/           pytest suite for auth, authorization, user mgmt
+│   ├── tests/           pytest suite for auth, authorization, user & form mgmt
 │   └── alembic.ini      Alembic configuration
 ├── docs/                Project documentation
 └── .env.example         Documentation of all required environment variables
@@ -78,8 +81,8 @@ Real secrets are never committed; `.env*` files are git-ignored.
 
 | Role | Can do |
 | --- | --- |
-| `admin` | Everything: dashboard, user management (create/update roles/status) |
-| `operator` | Authenticated access to the dashboard |
+| `admin` | Everything: dashboard, user management (create/update roles/status), form builder |
+| `operator` | Authenticated access to the dashboard (form builder is admin-only) |
 | `viewer` | Authenticated, read-only access to the dashboard |
 
 ## Run the backend
@@ -125,7 +128,9 @@ npm install
 npm run dev                     # http://localhost:5173
 ```
 
-## API surface (Phase 1)
+## API surface
+
+### Phase 1 — Auth & user management
 
 | Method | Path | Access | Purpose |
 | --- | --- | --- | --- |
@@ -136,6 +141,22 @@ npm run dev                     # http://localhost:5173
 | `POST` | `/api/users` | Admin | Create a user |
 | `GET` | `/api/users/{id}` | Admin | Get one user |
 | `PATCH` | `/api/users/{id}` | Admin | Update role / status / profile / password |
+
+### Phase 2 — Form builder (all admin-only)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/forms` | Create a draft form |
+| `GET` | `/api/forms` | List forms (filter by `status` / `created_by`) |
+| `GET` | `/api/forms/{form_id}` | Get a form with its fields |
+| `PATCH` | `/api/forms/{form_id}` | Rename / change description (draft only) |
+| `DELETE` | `/api/forms/{form_id}` | Delete a draft form |
+| `POST` | `/api/forms/{form_id}/publish` | Publish (requires ≥ 1 field, draft only) |
+| `POST` | `/api/forms/{form_id}/archive` | Archive (draft or published) |
+| `POST` | `/api/forms/{form_id}/fields` | Add a field (draft only) |
+| `PATCH` | `/api/forms/{form_id}/fields/{field_id}` | Update a field (draft only) |
+| `DELETE` | `/api/forms/{form_id}/fields/{field_id}` | Delete a field (draft only) |
+| `POST` | `/api/forms/{form_id}/fields/reorder` | Reorder fields (draft only) |
 
 ## Run the tests
 
@@ -153,5 +174,10 @@ python -m pytest                # auth, authorization, and user-management tests
   login, `/api/auth/me`, role-based authorization, admin user management,
   initial-admin CLI, frontend login/protected routes/dashboard, and admin user
   management UI.
-- Pending phases: form builder, dynamic forms, data entry, record
-  management/search/filter, exports.
+- Phase 2 complete: generic `Form` / `FormField` models + migration, forms &
+  fields API with draft → published → archived lifecycle, per-type settings
+  validation, and a React builder UI (`/forms`, `/forms/new`,
+  `/forms/:id/edit`) with a field palette, drag-and-drop ordering, field
+  editor (auto-suggested keys), and a live preview.
+- Pending phases: data entry (filling published forms), record management /
+  search / filter, exports.
