@@ -9,6 +9,7 @@ from app.schemas.form import (
     FormRead,
     FormUpdate,
 )
+from app.schemas.submission import SubmissionCreate, SubmissionRead
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 
 __all__ = [
@@ -21,6 +22,8 @@ __all__ = [
     "FormRead",
     "FormUpdate",
     "LoginRequest",
+    "SubmissionCreate",
+    "SubmissionRead",
     "TokenResponse",
     "UserCreate",
     "UserRead",

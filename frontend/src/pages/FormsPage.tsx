@@ -177,6 +177,15 @@ export function FormsPage() {
                           Publish
                         </button>
                       )}
+                      {form.status === 'published' && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/forms/${form.id}/submit`)}
+                          className="rounded-lg border border-slate-900 px-2.5 py-1 text-xs font-medium text-slate-900 hover:bg-slate-100"
+                        >
+                          Enter data
+                        </button>
+                      )}
                       {(form.status === 'draft' || form.status === 'published') && (
                         <button
                           type="button"

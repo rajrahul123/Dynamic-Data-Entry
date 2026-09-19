@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
 from app.models.role import Role
@@ -32,4 +32,8 @@ class User(TimestampMixin, Base):
     )
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    submissions: Mapped[list["Submission"]] = relationship(
+        back_populates="submitted_by_user", passive_deletes=True
     )

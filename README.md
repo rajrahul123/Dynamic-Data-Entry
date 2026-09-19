@@ -4,14 +4,17 @@ A generic dynamic data-entry platform where administrators create and publish
 custom forms, data-entry operators fill them in, and submitted records can be
 managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 
-> **Status: Phase 2 — Dynamic Form Builder.** The repository contains a
-> full-stack foundation with JWT authentication, role-based access control
-> (`admin` / `operator` / `viewer`), an initial-admin CLI, an admin-only user
-> management UI, and an admin-only **dynamic form builder**: administrators
-> design generic forms (name, description, ordered fields) with a
-> draft → published → archived lifecycle, per-field type and settings
-> validation, drag-and-drop field ordering, and a live preview renderer.
-> Data entry, records, and export features are not implemented yet.
+> **Status: Phase 3 — Dynamic Form Renderer & Submission Foundation.** The
+> repository contains a full-stack foundation with JWT authentication,
+> role-based access control (`admin` / `operator` / `viewer`), an initial-admin
+> CLI, an admin-only user management UI, an admin-only **dynamic form
+> builder** (name, description, ordered fields, draft → published → archived
+> lifecycle, per-type settings validation, drag-and-drop ordering, live
+> preview), and now **data capture**: any authenticated user can open a
+> published form and submit data, validated dynamically server-side against the
+> field definitions. Submissions are stored in a generic `submissions` table
+> as JSONB; a RESTRICT foreign key prevents deleting a form that has
+> submissions. Record management / search / export are not implemented yet.
 
 ## Architecture
 
@@ -24,10 +27,10 @@ dynamic-data-entry-platform/
 │       └── pages/       Login, Dashboard, and admin User Management
 ├── backend/             FastAPI + SQLAlchemy + Alembic + Pydantic API
 │   ├── app/
-│   │   ├── api/         Routers: auth, users, forms
+│   │   ├── api/         Routers: auth, users, forms, submissions
 │   │   │   └── deps.py  Auth/role dependencies (the real security boundary)
-│   │   ├── core/        Settings, database, security (hashing + JWT)
-│   │   ├── models/      Declarative base, User, Form, FormField
+│   │   ├── core/        Settings, database, security, submission_validation
+│   │   ├── models/      Declarative base, User, Form, FormField, Submission
 │   │   └── schemas/     Pydantic request/response models
 │   ├── scripts/         create_admin.py (initial administrator CLI)
 │   ├── tests/           pytest suite for auth, authorization, user & form mgmt
@@ -81,9 +84,9 @@ Real secrets are never committed; `.env*` files are git-ignored.
 
 | Role | Can do |
 | --- | --- |
-| `admin` | Everything: dashboard, user management (create/update roles/status), form builder |
-| `operator` | Authenticated access to the dashboard (form builder is admin-only) |
-| `viewer` | Authenticated, read-only access to the dashboard |
+| `admin` | Everything: dashboard, user management (create/update roles/status), form builder, submissions |
+| `operator` | Authenticated access to the dashboard and submissions (form builder is admin-only) |
+| `viewer` | Authenticated, read-only dashboard access and submissions |
 
 ## Run the backend
 
@@ -158,12 +161,19 @@ npm run dev                     # http://localhost:5173
 | `DELETE` | `/api/forms/{form_id}/fields/{field_id}` | Delete a field (draft only) |
 | `POST` | `/api/forms/{form_id}/fields/reorder` | Reorder fields (draft only) |
 
+### Phase 3 — Submissions (any authenticated role)
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/forms/{form_id}/definition` | Any authenticated user | Published-only form definition for building the entry form |
+| `POST` | `/api/forms/{form_id}/submissions` | Any authenticated user | Submit data for a published form; validates dynamically against field definitions (401 anonymous, 404 unknown form, 400 draft/archived, 422 invalid data) |
+
 ## Run the tests
 
 ```bash
 cd backend
 .venv\Scripts\activate
-python -m pytest                # auth, authorization, and user-management tests
+python -m pytest                # auth, authorization, user, form-builder, and submission tests
 ```
 
 ## Current project status
@@ -179,5 +189,12 @@ python -m pytest                # auth, authorization, and user-management tests
   validation, and a React builder UI (`/forms`, `/forms/new`,
   `/forms/:id/edit`) with a field palette, drag-and-drop ordering, field
   editor (auto-suggested keys), and a live preview.
-- Pending phases: data entry (filling published forms), record management /
-  search / filter, exports.
+- Phase 3 complete: generic `Submission` model + migration (JSONB `data`,
+  RESTRICT form/user foreign keys), a dynamic server-side validation engine
+  covering all 11 field types, `POST /api/forms/{form_id}/submissions` (any
+  authenticated role; published forms only), `GET
+  /api/forms/{form_id}/definition`, and a React submission page
+  (`/forms/:id/submit`) that reuses the field renderer in controlled mode,
+  performs client-side validation, and maps server validation errors onto
+  individual fields.
+- Pending phases: record management / search / filter, exports.

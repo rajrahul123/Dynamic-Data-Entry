@@ -70,6 +70,9 @@ class Form(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="FormField.sort_order",
     )
+    submissions: Mapped[list["Submission"]] = relationship(
+        back_populates="form", passive_deletes=True
+    )
 
 
 class FormField(TimestampMixin, Base):

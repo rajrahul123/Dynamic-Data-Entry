@@ -8,6 +8,7 @@ import { FormBuilderPage } from './pages/FormBuilderPage'
 import FormCreatePage from './pages/FormCreatePage'
 import { FormsPage } from './pages/FormsPage'
 import LoginPage from './pages/LoginPage'
+import { SubmissionPage } from './pages/SubmissionPage'
 import { UsersPage } from './pages/UsersPage'
 
 function App() {
@@ -56,6 +57,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/forms/:id/submit" element={<SubmissionPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

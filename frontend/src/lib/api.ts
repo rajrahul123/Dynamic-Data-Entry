@@ -136,14 +136,35 @@ export interface FieldReorder {
   field_ids: number[]
 }
 
+export interface SubmissionCreate {
+  data: Record<string, unknown>
+}
+
+export interface SubmissionResponse {
+  id: number
+  form_id: number
+  submitted_by: number
+  data: Record<string, unknown>
+  submitted_at: string
+  updated_at: string
+}
+
+export interface ValidationErrorDetail {
+  loc: (string | number)[]
+  msg: string
+  type: string
+}
+
 const TOKEN_KEY = 'ddep_access_token'
 
 export class ApiError extends Error {
   status: number
+  detail: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail: unknown = null) {
     super(message)
     this.status = status
+    this.detail = detail
   }
 }
 
@@ -184,20 +205,25 @@ async function request<T>(
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`
+    let detail: unknown = null
     try {
       const body: unknown = await response.json()
       if (
         typeof body === 'object' &&
         body !== null &&
-        'detail' in body &&
-        typeof (body as { detail: unknown }).detail === 'string'
+        'detail' in body
       ) {
-        message = (body as { detail: string }).detail
+        const bodyDetail = (body as { detail: unknown }).detail
+        if (typeof bodyDetail === 'string') {
+          message = bodyDetail
+        } else {
+          detail = bodyDetail
+        }
       }
     } catch {
       // Non-JSON error body; keep the generic message.
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, detail)
   }
 
   return (await response.json()) as T
@@ -301,6 +327,20 @@ export async function reorderFields(formId: number, fieldIds: number[]): Promise
   return request<FormField[]>(`/api/forms/${formId}/fields/reorder`, {
     method: 'POST',
     body: JSON.stringify({ field_ids: fieldIds }),
+  })
+}
+
+export async function fetchPublishedForm(id: number): Promise<Form> {
+  return request<Form>(`/api/forms/${id}/definition`)
+}
+
+export async function submitSubmission(
+  formId: number,
+  data: Record<string, unknown>,
+): Promise<SubmissionResponse> {
+  return request<SubmissionResponse>(`/api/forms/${formId}/submissions`, {
+    method: 'POST',
+    body: JSON.stringify({ data }),
   })
 }
 

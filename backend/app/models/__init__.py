@@ -1,6 +1,7 @@
 from app.models.base import Base, TimestampMixin
 from app.models.form import FieldType, Form, FormField, FormStatus
 from app.models.role import Role
+from app.models.submission import Submission
 from app.models.user import User
 
 __all__ = [
@@ -10,6 +11,7 @@ __all__ = [
     "FormField",
     "FormStatus",
     "Role",
+    "Submission",
     "TimestampMixin",
     "User",
 ]

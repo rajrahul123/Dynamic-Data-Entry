@@ -4,29 +4,41 @@ import type { FormField } from '../../lib/api'
 
 interface FieldRendererProps {
   field: FormField
+  value?: unknown
+  onChange?: (value: unknown) => void
+  disabled?: boolean
 }
 
 const inputClasses =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none'
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-500'
 
-function Options({ field }: FieldRendererProps) {
+function stringify(value: unknown): string {
+  return typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
+}
+
+function Options({ field, value, onChange, disabled }: FieldRendererProps & { value: unknown }) {
   const options = field.settings?.options ?? []
+  if (!options.length) {
+    return <p className="text-sm text-slate-400">No options configured.</p>
+  }
   return (
-    <select className={inputClasses} defaultValue={field.default_value ?? undefined}>
-      {field.settings?.options === null || !options.length ? (
-        <option value="">— no options —</option>
-      ) : (
-        options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))
-      )}
+    <select
+      className={inputClasses}
+      value={stringify(value)}
+      disabled={disabled}
+      onChange={(event) => onChange?.(event.target.value)}
+    >
+      <option value="">Please select…</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
     </select>
   )
 }
 
-function RadioGroup({ field }: FieldRendererProps) {
+function RadioGroup({ field, value, onChange, disabled }: FieldRendererProps & { value: unknown }) {
   const options = field.settings?.options ?? []
   if (!options.length) {
     return <p className="text-sm text-slate-400">No options configured.</p>
@@ -37,9 +49,11 @@ function RadioGroup({ field }: FieldRendererProps) {
         <label key={option.value} className="flex items-center gap-2 text-sm text-slate-700">
           <input
             type="radio"
-            name={field.field_key}
+            name={`entry-${field.field_key}`}
             value={option.value}
-            defaultChecked={field.default_value === option.value}
+            checked={stringify(value) === option.value}
+            disabled={disabled}
+            onChange={(event) => onChange?.(event.target.value)}
             className="accent-slate-900"
           />
           {option.label}
@@ -49,13 +63,22 @@ function RadioGroup({ field }: FieldRendererProps) {
   )
 }
 
-export function FieldRenderer({ field }: FieldRendererProps) {
+export function FieldRenderer({ field, value, onChange, disabled }: FieldRendererProps) {
   const { settings } = field
+  const controlled = onChange !== undefined
 
   if (field.field_type === 'checkbox') {
+    const checked = value === true
     return (
       <label className="flex items-start gap-2 text-sm text-slate-700">
-        <input type="checkbox" className="mt-0.5 accent-slate-900" />
+        <input
+          type="checkbox"
+          checked={controlled ? checked : undefined}
+          defaultChecked={controlled ? undefined : field.default_value === 'true'}
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.checked)}
+          className="mt-0.5 accent-slate-900"
+        />
         <span>
           {settings?.checkbox_label ?? field.label}
           {field.required && <span className="ml-0.5 text-red-600">*</span>}
@@ -74,7 +97,10 @@ export function FieldRenderer({ field }: FieldRendererProps) {
           rows={4}
           minLength={settings?.min_length ?? undefined}
           maxLength={settings?.max_length ?? undefined}
-          defaultValue={field.default_value ?? undefined}
+          value={controlled ? stringify(value) : undefined}
+          defaultValue={controlled ? undefined : field.default_value ?? undefined}
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.value)}
         />
       )
       break
@@ -87,7 +113,10 @@ export function FieldRenderer({ field }: FieldRendererProps) {
           min={settings?.min ?? undefined}
           max={settings?.max ?? undefined}
           step={settings?.step ?? undefined}
-          defaultValue={field.default_value ?? undefined}
+          value={controlled ? stringify(value) : undefined}
+          defaultValue={controlled ? undefined : field.default_value ?? undefined}
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.value)}
         />
       )
       break
@@ -112,12 +141,15 @@ export function FieldRenderer({ field }: FieldRendererProps) {
           placeholder={field.placeholder ?? undefined}
           minLength={settings?.min_length ?? undefined}
           maxLength={settings?.max_length ?? undefined}
-          defaultValue={field.default_value ?? undefined}
+          value={controlled ? stringify(value) : undefined}
+          defaultValue={controlled ? undefined : field.default_value ?? undefined}
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.value)}
         />
       )
       break
     case 'select':
-      control = <Options field={field} />
+      control = <Options field={field} value={value} onChange={onChange} disabled={disabled} />
       break
     case 'radio':
       return (
@@ -126,17 +158,27 @@ export function FieldRenderer({ field }: FieldRendererProps) {
             {field.label}
             {field.required && <span className="ml-0.5 text-red-600">*</span>}
           </span>
-          <RadioGroup field={field} />
+          <RadioGroup field={field} value={value} onChange={onChange} disabled={disabled} />
         </div>
       )
     default:
-      control = <input type="text" className={inputClasses} placeholder={field.placeholder ?? undefined} />
+      control = (
+        <input
+          type="text"
+          className={inputClasses}
+          placeholder={field.placeholder ?? undefined}
+          value={controlled ? stringify(value) : undefined}
+          defaultValue={controlled ? undefined : field.default_value ?? undefined}
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.value)}
+        />
+      )
   }
 
   return (
     <div>
       <label
-        htmlFor={`preview-${field.field_key}`}
+        htmlFor={`entry-${field.field_key}`}
         className="mb-1 flex text-sm font-medium text-slate-800"
       >
         {field.label}
