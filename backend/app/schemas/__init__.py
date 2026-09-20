@@ -1,4 +1,4 @@
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.form import (
     AvailableFormRead,
     FieldCreate,
@@ -33,6 +33,7 @@ __all__ = [
     "FormUpdate",
     "LoginRequest",
     "RecordFilter",
+    "RegisterRequest",
     "SubmissionCreate",
     "SubmissionDetail",
     "SubmissionListItem",

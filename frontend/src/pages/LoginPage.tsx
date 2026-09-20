@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../lib/auth-context'
 
@@ -14,6 +14,7 @@ function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
+  const registered = (location.state as { registered?: boolean } | null)?.registered ?? false
 
   if (user) {
     return <Navigate to={from} replace />
@@ -43,6 +44,12 @@ function LoginPage() {
           Dynamic Data Entry Platform
         </h1>
         <p className="mt-1 text-sm text-slate-500">Sign in to continue</p>
+
+        {registered && (
+          <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            Account created successfully. Please sign in with your new account.
+          </p>
+        )}
 
         <label className="mt-6 block text-xs font-medium text-slate-600" htmlFor="username">
           Username or email
@@ -81,6 +88,16 @@ function LoginPage() {
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+
+        <p className="mt-4 text-center text-sm text-slate-500">
+          No account?{' '}
+          <Link
+            to="/register"
+            className="font-medium text-slate-900 underline-offset-4 hover:underline"
+          >
+            Create Account
+          </Link>
+        </p>
       </form>
     </main>
   )

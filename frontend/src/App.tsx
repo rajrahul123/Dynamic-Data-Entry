@@ -12,6 +12,7 @@ import { RecordDetailPage } from './pages/RecordDetailPage'
 import { RecordEditPage } from './pages/RecordEditPage'
 import { RecordsIndexPage } from './pages/RecordsIndexPage'
 import { RecordsPage } from './pages/RecordsPage'
+import RegistrationPage from './pages/RegistrationPage'
 import { SubmissionPage } from './pages/SubmissionPage'
 import { UsersPage } from './pages/UsersPage'
 
@@ -21,6 +22,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegistrationPage />} />
           <Route
             element={
               <ProtectedRoute>

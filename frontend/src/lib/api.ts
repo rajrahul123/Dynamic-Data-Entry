@@ -274,6 +274,24 @@ export async function login(username: string, password: string): Promise<LoginRe
   )
 }
 
+export interface RegisterRequest {
+  username: string
+  email: string
+  password: string
+  full_name?: string | null
+}
+
+export async function register(data: RegisterRequest): Promise<User> {
+  return request<User>(
+    '/api/auth/register',
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+    false,
+  )
+}
+
 export async function fetchMe(): Promise<User> {
   return request<User>('/api/auth/me')
 }
