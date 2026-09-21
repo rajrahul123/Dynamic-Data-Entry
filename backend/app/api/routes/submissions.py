@@ -227,7 +227,8 @@ def export_submissions(
     sort_by: str | None = Query(default=None),
     sort_order: str | None = Query(default=None),
 ) -> Response:
-    """Export a form's records as CSV / XLSX / PDF / SQL (any authenticated role).
+    """Export a form's records as CSV / XLSX / PDF / SQL / form-style PDF
+    (any authenticated role).
 
     Export is a read operation, so the same access rules as the records list
     apply: admin / operator / viewer may export; anonymous requests are
@@ -236,12 +237,18 @@ def export_submissions(
     ``search`` / ``filters`` / ``sort_by`` / ``sort_order`` behave exactly as
     on the records page. ``limit`` / ``offset`` are never applied -- every
     matching record is exported up to the configured safety limit.
+
+    ``format``:
+
+    * ``csv`` / ``xlsx`` / ``sql`` -- table exports (Phase 6).
+    * ``pdf`` -- landscape table PDF (Phase 6).
+    * ``pdf-form`` -- portrait form-style PDF, one record per page (Phase 8).
     """
     form = _load_form(db, form_id, load_fields=True)
     _require_record_visibility(form)
 
     try:
-        content, media_type, extension = export_service.generate_export(
+        content, media_type, _extension = export_service.generate_export(
             db,
             form,
             format=format,
@@ -255,10 +262,46 @@ def export_submissions(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
 
-    filename = f"{export_service.slugify_filename(form.name, form.id)}-records.{extension}"
+    filename = export_service.export_filename(form, format)
     return Response(
         content=content,
         media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{form_id}/submissions/{submission_id}/export")
+def export_single_submission(
+    form_id: int,
+    submission_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    format: str = Query(...),
+) -> Response:
+    """Export ONE record as a form-style PDF (any authenticated role).
+
+    Reuses the record-detail access rules: the submission must belong to the
+    requested form (cross-form ids -> 404), the form must be published or
+    archived (draft -> 400), and anonymous requests are rejected (401). Only
+    ``format=pdf`` is meaningful here; anything else -> 400.
+    """
+    form = _load_form(db, form_id, load_fields=True)
+    _require_record_visibility(form)
+
+    if format != "pdf":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unsupported export format: {format}. "
+                "A single record can only be exported as 'pdf'."
+            ),
+        )
+
+    submission = _load_submission(db, form_id, submission_id)
+    filename = export_service.individual_pdf_filename(form, submission.id)
+    return Response(
+        content=export_service.render_form_pdf(form, submission),
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

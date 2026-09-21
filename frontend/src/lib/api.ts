@@ -401,11 +401,41 @@ export interface SubmissionQueryOptions {
   sortOrder?: 'asc' | 'desc'
 }
 
-export type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'sql'
+export type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'sql' | 'pdf-form'
 
 export interface ExportResult {
   blob: Blob
   filename: string
+}
+
+async function readExportResponse(response: Response, fallbackFilename: string): Promise<ExportResult> {
+  if (response.status === 401) {
+    setToken(null)
+    window.dispatchEvent(new Event('auth:unauthorized'))
+  }
+
+  if (!response.ok) {
+    let message = `Export failed with status ${response.status}`
+    try {
+      const body: unknown = await response.json()
+      if (
+        typeof body === 'object' &&
+        body !== null &&
+        'detail' in body &&
+        typeof (body as { detail: string }).detail === 'string'
+      ) {
+        message = (body as { detail: string }).detail
+      }
+    } catch {
+      // Non-JSON error body; keep the generic message.
+    }
+    throw new ApiError(response.status, message)
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = /filename="([^"]+)"/.exec(disposition)
+  const filename = match ? match[1] : fallbackFilename
+  return { blob: await response.blob(), filename }
 }
 
 export function buildSubmissionQueryParams(
@@ -452,34 +482,19 @@ export async function exportSubmissions(
     `/api/forms/${formId}/submissions/export?${params.toString()}`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   )
+  return readExportResponse(response, `records.${format}`)
+}
 
-  if (response.status === 401) {
-    setToken(null)
-    window.dispatchEvent(new Event('auth:unauthorized'))
-  }
-
-  if (!response.ok) {
-    let message = `Export failed with status ${response.status}`
-    try {
-      const body: unknown = await response.json()
-      if (
-        typeof body === 'object' &&
-        body !== null &&
-        'detail' in body &&
-        typeof (body as { detail: unknown }).detail === 'string'
-      ) {
-        message = (body as { detail: string }).detail
-      }
-    } catch {
-      // Non-JSON error body; keep the generic message.
-    }
-    throw new ApiError(response.status, message)
-  }
-
-  const disposition = response.headers.get('Content-Disposition') ?? ''
-  const match = /filename="([^"]+)"/.exec(disposition)
-  const filename = match ? match[1] : `records.${format}`
-  return { blob: await response.blob(), filename }
+export async function exportSingleRecordPdf(
+  formId: number,
+  submissionId: number,
+): Promise<ExportResult> {
+  const token = getToken()
+  const response = await fetch(
+    `/api/forms/${formId}/submissions/${submissionId}/export?format=pdf`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+  return readExportResponse(response, `record-${submissionId}.pdf`)
 }
 
 export async function fetchSubmission(

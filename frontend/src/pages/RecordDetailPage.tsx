@@ -5,10 +5,22 @@ import { useAuth } from '../lib/auth-context'
 import {
   type Form,
   type SubmissionListItem,
+  exportSingleRecordPdf,
   fetchFormDefinition,
   fetchSubmission,
 } from '../lib/api'
 import { formatRecordValue } from '../lib/recordFormat'
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
+}
 
 export function RecordDetailPage() {
   const { id, submissionId } = useParams<{ id: string; submissionId: string }>()
@@ -21,6 +33,8 @@ export function RecordDetailPage() {
   const [record, setRecord] = useState<SubmissionListItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [exportBusy, setExportBusy] = useState(false)
 
   const canMutate = user?.role === 'admin' || user?.role === 'operator'
 
@@ -53,6 +67,22 @@ export function RecordDetailPage() {
       cancelled = true
     }
   }, [formId, recordId])
+
+  async function handlePdfExport() {
+    if (!form || !record) return
+    setExportBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const { blob, filename } = await exportSingleRecordPdf(formId, record.id)
+      triggerDownload(blob, filename)
+      setNotice(`Form PDF downloaded as ${filename}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExportBusy(false)
+    }
+  }
 
   if (loading) {
     return <p className="text-sm text-slate-500">Loading record…</p>
@@ -92,6 +122,14 @@ export function RecordDetailPage() {
           >
             Back to records
           </Link>
+          <button
+            type="button"
+            disabled={exportBusy}
+            onClick={() => void handlePdfExport()}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {exportBusy ? 'Exporting…' : 'Form PDF'}
+          </button>
           {canMutate && (
             <Link
               to={`/forms/${formId}/records/${record.id}/edit`}
@@ -102,6 +140,11 @@ export function RecordDetailPage() {
           )}
         </div>
       </header>
+
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {notice && (
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p>
+      )}
 
       <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         {fields.map((field) => (

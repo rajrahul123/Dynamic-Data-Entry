@@ -23,10 +23,21 @@ Export formats:
 * ``sql``  — ``INSERT INTO submissions (...) VALUES (...);`` statements for
   PostgreSQL, safely single-quote-escaped; intended for inspection or data
   migration, **not** a complete database backup.
+* ``pdf-form`` — portrait, form-style PDF with **one submission per page**
+  (Phase 8). Renders field labels and values from the live form definition,
+  reusing the same ``_display_value`` formatting as every other format.
+  Non-Latin script runs (Devanagari / CJK) are wrapped in registered Unicode
+  fonts when any are available on the host, so Hindi and CJK text renders when
+  the environment provides suitable fonts. There is **no executable template
+  system**: the layout is generated strictly from the form definition.
 
 The SQL export is the *only* format that emits raw ``Submission.data`` JSON;
 spreadsheet/PDF exports render only the columns defined by the current form
-definition (unknown stored keys are never added as arbitrary columns).
+definition (unknown stored keys are never added as arbitrary columns). The
+table PDF additionally caps any single cell at ``_PDF_RECORD_CELL_LIMIT`` so a
+pathological value can never abort reportlab; CSV / XLSX / SQL always carry the
+complete value and the form-style PDFs apply the same cell cap only to field
+values.
 """
 
 from __future__ import annotations
@@ -34,6 +45,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import re
 import string
 from datetime import date, datetime, time
@@ -47,7 +59,10 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
+    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -60,7 +75,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import FieldType, Form, Submission
 from app.services.record_query import RecordQueryError, build_record_query
 
-EXPORT_FORMATS = ("csv", "xlsx", "pdf", "sql")
+EXPORT_FORMATS = ("csv", "xlsx", "pdf", "sql", "pdf-form")
 
 #: Hard server-side cap on exported rows. Exports are synchronous and bounded;
 #: a single export larger than this should be narrowed via search/filters.
@@ -74,6 +89,7 @@ _MEDIA_TYPES = {
     "csv": "text/csv; charset=utf-8",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "pdf": "application/pdf",
+    "pdf-form": "application/pdf",
     "sql": "application/sql",
 }
 
@@ -395,6 +411,307 @@ def _pdf_cell_text(value: str, limit: int = _PDF_RECORD_CELL_LIMIT) -> str:
     return value
 
 
+# --------------------------------------------------------------------------- #
+# Phase 8: form-style PDF (individual + bulk)
+#
+# One portrait page per submission. Field labels and values come from the live
+# form definition and are formatted with the same ``_display_value`` logic as
+# every other export. There is no executable template system: the layout is
+# generated entirely from the form definition and safe XML-escaped text.
+#
+# Non-Latin script runs (Devanagari / CJK) are wrapped in registered Unicode
+# fonts when a matching font exists on the host; otherwise they fall back to
+# the base font (reportlab never raises, though unsupported glyphs will not
+# render accurately). This is the documented Unicode support ceiling.
+# --------------------------------------------------------------------------- #
+
+#: Script-range regexes used to detect Devanagari and CJK runs inside values.
+_FORM_SCRIPT_SPLIT = re.compile(
+    "(?P<devanagari>[\u0900-\u097f\ua8e0-\ua8ff\u1cd0-\u1cff]+)"
+    "|(?P<cjk>[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff"
+    "\uf900-\ufaff\uac00-\ud7af]+)"
+)
+
+#: Directory roots where unicode TTF/TTC fonts are searched for. The whole
+#: list is probed with ``os.path.isfile`` so machines without a font simply
+#: degrade to the base Helvetica font instead of crashing.
+_FORM_FONT_DIRS = tuple(
+    dict.fromkeys(
+        item
+        for item in (
+            os.path.join(os.environ.get("WINDIR") or "", "Fonts"),
+            "C:/Windows/Fonts",
+            "/usr/share/fonts/opentype/noto",
+            "/usr/share/fonts/truetype/dejavu",
+        )
+        if item and not item.startswith("\\")
+    )
+)
+
+#: Candidate font files per script. Lookup order matters; the first existing
+#: file is registered (subfont 0) under the registered name.
+_FORM_FONT_CANDIDATES = {
+    "devanagari": ("DDEPDevanagari", ("nirmala.ttc", "NotoSansDevanagari-Regular.ttf", "DejaVuSans.ttf")),
+    "cjk": ("DDEPCJK", ("msyh.ttc", "msyh.ttf", "simsun.ttc", "NotoSansCJK-Regular.ttc", "PingFang.ttc", "DejaVuSans.ttf")),
+}
+
+_UNICODE_FONT_CACHE: dict[str, str | None] = {}
+
+
+def _unicode_font(script: str) -> str | None:
+    """Return the registered font name for a script, or None if unavailable."""
+    if script not in _UNICODE_FONT_CACHE:
+        registered_name, candidates = _FORM_FONT_CANDIDATES[script]
+        _UNICODE_FONT_CACHE[script] = None
+        for directory in _FORM_FONT_DIRS:
+            for filename in candidates:
+                path = os.path.join(directory, filename)
+                if not os.path.isfile(path):
+                    continue
+                try:
+                    pdfmetrics.registerFont(TTFont(registered_name, path, subfontIndex=0))
+                    _UNICODE_FONT_CACHE[script] = registered_name
+                    break
+                except Exception:
+                    continue
+            if _UNICODE_FONT_CACHE[script]:
+                break
+    return _UNICODE_FONT_CACHE.get(script)
+
+
+def _font_marked_text(text: str) -> str:
+    """XML-escape ``text`` and wrap non-Latin script runs in Unicode fonts.
+
+    ASCII / Latin-1 runs stay in the base Helvetica font (so they remain
+    directly extractable and consistent with the rest of the PDF output);
+    Devanagari and CJK runs are wrapped in ``<font name="...">`` spans when a
+    matching font was registered. All content is XML-escaped first, so the
+    only markup emitted is the intentional ``<font>`` wrapper.
+    """
+    devanagari_font = _unicode_font("devanagari")
+    cjk_font = _unicode_font("cjk")
+    escaped = xml_escape(str(text))
+
+    def wrap(font_name: str, chunk: str) -> str:
+        return f'<font name="{font_name}">{chunk}</font>'
+
+    pieces: list[str] = []
+    pos = 0
+    for match in _FORM_SCRIPT_SPLIT.finditer(escaped):
+        pieces.append(escaped[pos : match.start()])
+        devanagari, cjk = match.group("devanagari"), match.group("cjk")
+        if devanagari and devanagari_font:
+            pieces.append(wrap(devanagari_font, devanagari))
+        elif cjk and cjk_font:
+            pieces.append(wrap(cjk_font, cjk))
+        else:
+            pieces.append(match.group(0))
+        pos = match.end()
+    pieces.append(escaped[pos:])
+    return "".join(pieces)
+
+
+_FORM_LABEL_WIDTH_RATIO = 0.34
+_FORM_MARGIN = 0.6 * inch
+
+
+def _form_page_styles() -> tuple[ParagraphStyle, ParagraphStyle, ParagraphStyle, ParagraphStyle]:
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "FormRecordTitle",
+        parent=styles["Title"],
+        fontSize=17,
+        leading=21,
+        spaceAfter=2,
+    )
+    meta_style = ParagraphStyle(
+        "FormRecordMeta",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=12,
+        textColor=colors.grey,
+        spaceAfter=8,
+    )
+    label_style = ParagraphStyle(
+        "FormRecordFieldLabel",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=12,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#334155"),
+        wordWrap="CJK",
+    )
+    value_style = ParagraphStyle(
+        "FormRecordFieldValue",
+        parent=styles["Normal"],
+        fontSize=10,
+        leading=14,
+        wordWrap="CJK",
+    )
+    return title_style, meta_style, label_style, value_style
+
+
+def _form_page_story(form: Form, submission: Submission) -> list:
+    """Flowables for ONE submission's form-style page.
+
+    Shared by the individual and bulk renderers so the layout cannot diverge.
+    A title, a meta line, and a label/value table driven by the live form
+    definition (ordered by ``sort_order``). Long and empty values are handled
+    by ``_display_value`` + ``_pdf_cell_text`` in exactly the same way as the
+    table PDF.
+    """
+    title_style, meta_style, label_style, value_style = _form_page_styles()
+
+    submitter = submission.submitted_by_user
+    submitter_name = (
+        submitter.full_name
+        if submitter and submitter.full_name
+        else (submitter.username if submitter else "")
+    )
+    submitted_at = (
+        submission.submitted_at.isoformat() if submission.submitted_at else ""
+    )
+    meta_text = (
+        f"Form: {xml_escape(form.name)} (#{form.id}) \u00b7 "
+        f"Submitted by {xml_escape(submitter_name or '')} \u00b7 {xml_escape(submitted_at)}"
+    )
+
+    available_width = letter[0] - 2 * _FORM_MARGIN
+    label_width = available_width * _FORM_LABEL_WIDTH_RATIO
+    value_width = available_width - label_width
+
+    header_cell_style = ParagraphStyle(
+        "FormRecordHeaderCell",
+        parent=getSampleStyleSheet()["Normal"],
+        fontSize=9.5,
+        leading=12,
+        fontName="Helvetica-Bold",
+        textColor=colors.white,
+    )
+
+    field_rows: list[list[Paragraph]] = [
+        [
+            Paragraph("Field", header_cell_style),
+            Paragraph("Value", header_cell_style),
+        ]
+    ]
+    for field in _ordered_fields(form):
+        stored = submission.data.get(field.field_key) if submission.data else None
+        display = _pdf_cell_text(_display_value(field, stored))
+        field_rows.append(
+            [
+                Paragraph(_font_marked_text(field.label), label_style),
+                Paragraph(_font_marked_text(display), value_style),
+            ]
+        )
+
+    table = Table(field_rows, colWidths=[label_width, value_width], repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#334155")),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+            ]
+        )
+    )
+
+    return [
+        Paragraph(f"Record #{submission.id} \u2014 {_font_marked_text(form.name)}", title_style),
+        Paragraph(meta_text, meta_style),
+        Spacer(1, 0.1 * inch),
+        table,
+    ]
+
+
+def _form_pdf_footer(canvas, doc) -> None:
+    """Page footer for form-style PDFs draws only safe static text."""
+    canvas.saveState()
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(colors.grey)
+    canvas.drawRightString(
+        letter[0] - doc.rightMargin, 0.4 * inch, f"Page {doc.page} \u00b7 Dynamic Data Entry Platform"
+    )
+    canvas.restoreState()
+
+
+def render_form_pdf(form: Form, submission: Submission) -> bytes:
+    """Render ONE record as a portrait form-style PDF page."""
+    buffer: BinaryIO = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=_FORM_MARGIN,
+        leftMargin=_FORM_MARGIN,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
+        title=f"Record #{submission.id} \u2014 {form.name}",
+        author="Dynamic Data Entry Platform",
+    )
+    doc.build(
+        _form_page_story(form, submission),
+        onFirstPage=_form_pdf_footer,
+        onLaterPages=_form_pdf_footer,
+    )
+    return buffer.getvalue()
+
+
+def render_bulk_form_pdf(form: Form, submissions: list[Submission]) -> bytes:
+    """Render MANY records as form-style PDF, exactly one submission per page.
+
+    ``PageBreak`` is inserted between records so data from different records
+    can never share a page; an empty result set yields a single blank page.
+    """
+    buffer: BinaryIO = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=_FORM_MARGIN,
+        leftMargin=_FORM_MARGIN,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
+        title=f"Records \u2014 {form.name}",
+        author="Dynamic Data Entry Platform",
+    )
+    story: list = []
+    for index, submission in enumerate(submissions):
+        story.extend(_form_page_story(form, submission))
+        if index < len(submissions) - 1:
+            story.append(PageBreak())
+    if not story:
+        story.append(Paragraph("", _form_page_styles()[3]))
+    doc.build(
+        story,
+        onFirstPage=_form_pdf_footer,
+        onLaterPages=_form_pdf_footer,
+    )
+    return buffer.getvalue()
+
+
+def export_filename(form: Form, format: str) -> str:
+    """Safe attachment filename for the bulk export endpoint.
+
+    The table PDF, form-style PDF and spreadsheet/SQL exports get distinct
+    stems so two different artifacts never collide in a download folder.
+    """
+    slug = slugify_filename(form.name, form.id)
+    if format == "pdf-form":
+        return f"{slug}-records-form.pdf"
+    if format == "pdf":
+        return f"{slug}-records.pdf"
+    return f"{slug}-records.{format}"
+
+
+def individual_pdf_filename(form: Form, submission_id: int) -> str:
+    """Safe attachment filename for an individual record's form PDF."""
+    return f"{slugify_filename(form.name, form.id)}-record-{submission_id}.pdf"
+
+
 def _sql_quote(value: str) -> str:
     """Single-quote a PostgreSQL string literal (safe against ``'``)."""
     return "'" + value.replace("'", "''") + "'"
@@ -472,4 +789,6 @@ def generate_export(
         return render_xlsx(form, submissions), _MEDIA_TYPES["xlsx"], "xlsx"
     if format == "pdf":
         return render_pdf(form, submissions), _MEDIA_TYPES["pdf"], "pdf"
+    if format == "pdf-form":
+        return render_bulk_form_pdf(form, submissions), _MEDIA_TYPES["pdf-form"], "pdf"
     return render_sql(form, submissions), _MEDIA_TYPES["sql"], "sql"

@@ -9,6 +9,7 @@ const FORMATS: { format: ExportFormat; label: string; description: string }[] = 
   { format: 'csv', label: 'CSV', description: 'Spreadsheet compatible' },
   { format: 'xlsx', label: 'Excel (.xlsx)', description: 'Formatted workbook' },
   { format: 'pdf', label: 'PDF', description: 'Printable table' },
+  { format: 'pdf-form', label: 'Form PDF', description: 'One record per page' },
   { format: 'sql', label: 'SQL', description: 'Raw INSERT statements' },
 ]
 

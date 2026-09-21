@@ -2,9 +2,10 @@
 
 A generic dynamic data-entry platform where administrators create and publish
 custom forms, data-entry operators fill them in, and submitted records can be
-managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
+managed, searched, filtered, and exported (Excel, CSV, PDF, SQL, or per-record
+form-style PDFs).
 
-> **Status: Phase 6 — Exports (Excel, CSV, PDF, SQL).** The
+> **Status: Phase 8 — Form-style PDF exports (individual + bulk).** The
 > repository contains a full-stack foundation with JWT authentication,
 > role-based access control (`admin` / `operator` / `viewer`), an initial-admin
 > CLI, an admin-only user management UI, an admin-only **dynamic form
@@ -38,7 +39,24 @@ managed, searched, filtered, and exported (Excel, CSV, PDF, SQL).
 > JSON in SQL), select/radio resolve to labels, checkboxes export Yes/No, and
 > missing values export blank. SQL is for inspection/migration only and
 > exports no credentials. A Records-page export menu applies the current query
-> and downloads the file.
+> and downloads the file. **Phase 7 adds public registration**: `POST
+> /api/auth/register` creates an account that is *always* assigned the Viewer
+> role (the role is never taken from the request body; only the admin-only
+> `POST /api/users` endpoint can create admin/operator accounts), so public
+> sign-up can never self-promote or accidentally mint elevated accounts.
+> **Phase 8 adds form-style PDF exports** that render each record like a
+> printable form (field label + value from the live form definition), portrait
+> and one submission per page, all built by one shared layout function: a bulk
+> `pdf-form` format on the existing export endpoint plus a new
+> `GET /api/forms/{id}/submissions/{id}/export?format=pdf` endpoint for a
+> single record. Values use the exact same formatting as every other export
+> (option labels, Yes/No, blanks), the long-value cap, and the
+> `MAX_EXPORT_RECORDS` safety limit. Devanagari / CJK runs are wrapped in
+> Unicode fonts registered from the host when available, so Hindi and CJK
+> render on machines that provide fonts; otherwise they degrade to the base
+> font without crashing. There is no executable template system. The records UI
+> gained a Form PDF button on each record detail page and a Form PDF item in
+> the export menu.
 
 ## Architecture
 
@@ -270,12 +288,39 @@ The records UI exposes the same surface through an **Export** menu that
 applies the current search/filters/sort (all matching records) and downloads
 the selected file.
 
+### Phase 7 — Public registration
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/auth/register` | Public | Create an account; always creates a **Viewer** (a `role` field in the request is ignored) |
+
+### Phase 8 — Form-style PDF exports
+
+Form-style PDFs print each record like a paper form: portrait, a title
+(`Record #<id> — <form name>`), a meta line (form, submitter, submitted-at),
+and a label/value table generated from the live form definition. Any
+authenticated role may download them; anonymous → 401, draft → 400,
+published / archived → 200. There is no executable template system.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/forms/{form_id}/submissions/export?format=pdf-form` | Bulk form-style PDF for all matching records; Phase 5 `search` / `filters` / `sort_by` / `sort_order` apply, `limit` / `offset` are ignored, one submission per page, empty result → one blank page; over-limit → 400 |
+| `GET /api/forms/{form_id}/submissions/{submission_id}/export?format=pdf` | Individual record form-style PDF; only `format=pdf` is accepted (anything else → 400), cross-form ids → 404, archive still exports |
+
+Both reuse the shared Phase 6 value formatting (`_display_value`), the
+400-character long-value cap, and `MAX_EXPORT_RECORDS`. Content-Disposition
+filenames: `<slug>-records-form.pdf` (bulk) and `<slug>-record-<id>.pdf`
+(individual) — distinct from the table PDF's `<slug>-records.pdf`. Non-Latin
+runs (Devanagari / CJK) are wrapped in Unicode fonts registered from the host
+(`Nirmala.ttc`, `msyh.ttc`, Noto/DejaVu fallbacks) when available and otherwise
+fall back to the base font without crashing.
+
 ## Run the tests
 
 ```bash
 cd backend
 .venv\Scripts\activate
-python -m pytest                # auth, authorization, user, form-builder, submission, record-management, record-query, and export tests (256 passing)
+python -m pytest                # auth, authorization, user, form-builder, submission, record-management, record-query, and export tests (304 passing)
 ```
 
 ## Current project status
@@ -338,4 +383,18 @@ python -m pytest                # auth, authorization, user, form-builder, submi
   validation, authorization, query semantics, escaping/Unicode, Excel/PDF
   validity, SQL-injection safety, and the limit. The records UI gained an
   Export menu that applies the current query and downloads the file.
+- Phase 7 complete: public registration (`POST /api/auth/register`) that always
+  creates Viewer accounts — the `role` is never taken from the request body, so
+  public sign-up cannot self-promote and only the admin-only `POST /api/users`
+  can mint admin/operator accounts. Covered by registration/auth tests.
+- Phase 8 complete: form-style PDF exports — bulk `format=pdf-form` on the
+  export endpoint (one submission per page, empty set → one blank page) and an
+  individual `GET /api/forms/{id}/submissions/{id}/export?format=pdf` endpoint;
+  one shared portrait layout generated from the live form definition, the Phase
+  6 value formatting and long-value cap, Unicode font wrapping for
+  Devanagari/CJK when the host provides fonts (safe fallback otherwise), safe
+  attachment filenames, and the export-record cap. Covered by 31 new SQLite
+  tests (304 total) plus 28 live PostgreSQL checks; frontend lint + build pass.
+  UI: Form PDF button on each record detail page and a Form PDF item in the
+  export menu.
 - Pending phases: none.
