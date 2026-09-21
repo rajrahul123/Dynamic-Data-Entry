@@ -153,7 +153,11 @@ class TestTenantIsolation:
         second_headers = login_headers(client, "second", "passw0rd!x")
 
         users_first = client.get("/api/users", headers=first_headers)
-        assert users_first.status_code == 403  # viewers cannot manage users
+        assert users_first.status_code == 200  # registrants administer their own tenant
+        assert [u["username"] for u in users_first.json()] == ["first"]
+
+        users_second = client.get("/api/users", headers=second_headers)
+        assert [u["username"] for u in users_second.json()] == ["second"]
 
         records_first = client.get("/api/records/forms", headers=first_headers).json()
         records_second = client.get("/api/records/forms", headers=second_headers).json()

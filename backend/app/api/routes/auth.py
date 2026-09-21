@@ -1,7 +1,11 @@
 """Authentication endpoints: register, login, and current user.
 
-Public registration always creates a Viewer account. The role is never taken
-from the request body: only administrators can assign elevated roles.
+Public registration always creates an ``admin`` account: every self-signup
+provisions its own organization (``Tenant``), and the founder of that
+organization is its administrator so they can build forms, submit entries,
+export data)Skip and manage their team. The role is never taken from the
+request body: only administrators can assign elevated roles via the user
+management API.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -56,14 +60,14 @@ def _invalid_credentials() -> HTTPException:
 def register(
     request: Request, response: Response, payload: RegisterRequest, db: DbSession
 ) -> User:
-    """Create a public account with the Viewer role.
+    """Create a self-registered account and provision its own organization.
 
-    The role is always ``Role.viewer``; a role (or any other field) sent by the
-    client is rejected outright by the schema, preventing privilege escalation.
-
-    Every self-signup also creates its own organization (``Tenant``) so the
-    new account starts with a clean, fully isolated data boundary, plus a
-    free-plan subscription so the billing lifecycle has a starting point.
+    Public registration always creates an ``admin`` account: the registrant
+    becomes the administrator of the ``Tenant`` that is provisioned for them
+    (with a free plan), so from the first login they can build forms, run data
+    entry, export, and invite their own team. The role is never taken from the
+    request body; elevating or changing roles for teammates is restricted to
+    tenant admins through the user-management endpoint.
     """
     if db.scalar(select(User).where(User.username == payload.username)) is not None:
         raise _conflict("Username is already taken")
@@ -80,7 +84,7 @@ def register(
         email=str(payload.email),
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
-        role=Role.viewer,
+        role=Role.admin,
         is_active=True,
         tenant_id=tenant.id,
     )

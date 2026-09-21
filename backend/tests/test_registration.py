@@ -37,12 +37,12 @@ class TestRegister:
         assert "password_hash" not in body
         assert "password" not in body
 
-    def test_registered_user_gets_viewer_role(self, client, db_session):
+    def test_registered_user_gets_admin_role(self, client, db_session):
         _register(client)
 
         user = db_session.scalar(select(User).where(User.username == "newbie"))
         assert user is not None
-        assert user.role is Role.viewer
+        assert user.role is Role.admin
 
     def test_password_is_stored_hashed(self, client, db_session):
         _register(client)
@@ -145,13 +145,19 @@ class TestRegisteredUserFlow:
         assert response.status_code == 200
         assert response.json()["access_token"]
 
-    def test_registered_viewer_cannot_access_admin_endpoints(self, client, db_session):
+    def test_registered_admin_can_access_own_tenant_admin_tooling(self, client, db_session):
         _register(client)
 
         headers = login_headers(client, "newbie", "passw0rd!x")
         response = client.get("/api/users", headers=headers)
 
-        assert response.status_code == 403
+        # The registrant is the admin of their freshly provisioned tenant, so
+        # admin endpoints work for them — they just start with a team of one
+        # (themselves) since registration no longer nests them under anyone.
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 1
+        assert body[0]["username"] == "newbie"
 
     def test_admin_management_still_works_and_is_tenant_scoped(self, client, db_session):
         """Admin tooling keeps working, but is isolated per organization.
@@ -172,9 +178,7 @@ class TestRegisteredUserFlow:
 
         registered = db_session.scalar(select(User).where(User.username == "newbie"))
         assert registered is not None
-        assert registered.role is Role.viewer
-
-        # Cross-tenant management attempts resolve to "not found".
+        assert registered.role is Role.admin
         patch = client.patch(
             f"/api/users/{registered.id}",
             headers=admin_headers,

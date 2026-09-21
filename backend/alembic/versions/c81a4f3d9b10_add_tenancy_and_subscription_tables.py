@@ -107,6 +107,19 @@ def upgrade() -> None:
     # the new NOT NULL constraints can be applied safely to pre-SaaS data.
     op.execute(sa.text("INSERT INTO tenants (id, name) VALUES (1, 'Default Tenant')"))
 
+    # The backfill above inserts an explicit id=1 which Postgres does not fold
+    # into the id sequence, so the first org signup would collide with the
+    # stale value. Rewind the sequence to the highest id we just wrote.
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                "SELECT setval("
+                "pg_get_serial_sequence('tenants', 'id'), "
+                "(SELECT MAX(id) FROM tenants)"
+                ")"
+            )
+        )
+
     for table in ("users", "forms", "form_fields", "submissions"):
         _add_tenant_columns(table)
 
