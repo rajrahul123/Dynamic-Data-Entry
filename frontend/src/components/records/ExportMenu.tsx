@@ -1,8 +1,6 @@
 import { type JSX, useState } from 'react'
 
-import {
-  type AppliedQuery,
-} from './QueryToolbar'
+import { type AppliedQuery } from './QueryToolbar'
 import { exportSubmissions, type ExportFormat } from '../../lib/api'
 
 const FORMATS: { format: ExportFormat; label: string; description: string }[] = [

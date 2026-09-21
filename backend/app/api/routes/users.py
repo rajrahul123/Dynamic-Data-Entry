@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentAdmin, DbSession, require_admin
 from app.core.security import hash_password
-from app.models import User
+from app.models import Role, User
 from app.schemas import UserCreate, UserRead, UserUpdate
 
 router = APIRouter(
@@ -98,6 +98,16 @@ def update_user(user_id: int, payload: UserUpdate, db: DbSession, admin: Current
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An admin cannot deactivate their own account",
+        )
+
+    if (
+        user.id == admin.id
+        and changes.get("role") is not None
+        and changes.get("role") is not Role.admin
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An admin cannot change their own role",
         )
 
     if "email" in changes and changes["email"] is not None:

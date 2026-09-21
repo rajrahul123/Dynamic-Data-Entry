@@ -580,9 +580,25 @@ class TestLifecycle:
 
         assert response.status_code == 400
 
-    def test_draft_record_management_does_not_corrupt_legacy(self, client, db_session):
-        # A draft form normally has no submissions, but PATCH still validates
-        # against current field definitions instead of silently corrupting.
+    def test_draft_records_hidden(self, client, db_session):
+        admin_user = create_user(
+            db_session, "root", "root@example.com", password=ADMIN_PASSWORD, role=Role.admin
+        )
+        admin = login_headers(client, "root", ADMIN_PASSWORD)
+        form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS, status="draft")
+        persisted = Submission(
+            form_id=form_id, submitted_by=admin_user.id, data=VALID_EMPLOYEE_DATA
+        )
+        db_session.add(persisted)
+        db_session.commit()
+        db_session.refresh(persisted)
+
+        assert _list(client, admin, form_id).status_code == 400
+        assert _detail(client, admin, form_id, persisted.id).status_code == 400
+
+    def test_draft_record_management_blocked(self, client, db_session):
+        # Draft forms are invisible to record operations: even legacy records
+        # inserted directly into the DB cannot be listed, edited, or deleted.
         admin_user = create_user(
             db_session, "root", "root@example.com", password=ADMIN_PASSWORD, role=Role.admin
         )
@@ -596,10 +612,13 @@ class TestLifecycle:
         db_session.refresh(persisted)
 
         bad = _update(client, admin, form_id, persisted.id, {"hacker": True})
-        assert bad.status_code == 422
+        assert bad.status_code == 400
 
         good = _update(client, admin, form_id, persisted.id, VALID_EMPLOYEE_DATA)
-        assert good.status_code == 200
+        assert good.status_code == 400
+
+        deleted = _delete(client, admin, form_id, persisted.id)
+        assert deleted.status_code == 400
 
     def test_archived_definition_exposed_for_records(self, client, db_session):
         admin = _admin(client, db_session)

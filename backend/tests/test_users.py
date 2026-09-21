@@ -182,6 +182,18 @@ class TestUpdateUser:
 
         assert response.status_code == 400
 
+    def test_admin_cannot_demote_self(self, client, db_session):
+        admin_user = create_user(db_session, "root2", "root2@example.com", password=ADMIN_PASSWORD, role=Role.admin)
+        headers = login_headers(client, "root2", ADMIN_PASSWORD)
+
+        response = client.patch(
+            f"/api/users/{admin_user.id}",
+            headers=headers,
+            json={"role": "operator"},
+        )
+
+        assert response.status_code == 400
+
     def test_admin_can_reset_password(self, client, db_session):
         target = create_user(db_session, "reset", "reset@example.com", password="oldpassword")
         headers = _admin(client, db_session)

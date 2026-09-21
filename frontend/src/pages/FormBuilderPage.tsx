@@ -388,7 +388,8 @@ export function FormBuilderPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900">Preview</h3>
         <p className="mb-4 mt-0.5 text-xs text-slate-500">
-          How this form renders for a submitter. Validation and submission come in a later phase.
+          How this form renders for a submitter. Required rules and per-type validation apply at
+          submission and record edit time.
         </p>
         <FormPreview fields={form.fields} />
       </section>

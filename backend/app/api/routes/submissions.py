@@ -176,6 +176,7 @@ def list_submissions(
       Without ``sort_by``, records come back newest-first (Phase 4 default).
     """
     form = _load_form(db, form_id, load_fields=True)
+    _require_record_visibility(form)
 
     try:
         where, order_by = build_record_query(
@@ -316,7 +317,8 @@ def get_submission(
     user: CurrentUser,
 ) -> dict:
     """Return one record (any authenticated role)."""
-    _load_form(db, form_id)
+    form = _load_form(db, form_id)
+    _require_record_visibility(form)
     return _serialize(_load_submission(db, form_id, submission_id))
 
 
@@ -338,6 +340,7 @@ def update_submission(
     engine as new submissions.
     """
     form = _load_form(db, form_id, load_fields=True)
+    _require_record_visibility(form)
     submission = _load_submission(db, form_id, submission_id)
 
     errors = validate_submission_data(form.fields, payload.data)
@@ -366,7 +369,8 @@ def delete_submission(
     This is a record-level operation: the form, its fields, and every other
     submission are untouched.
     """
-    _load_form(db, form_id)
+    form = _load_form(db, form_id)
+    _require_record_visibility(form)
     submission = _load_submission(db, form_id, submission_id)
     db.delete(submission)
     db.commit()
