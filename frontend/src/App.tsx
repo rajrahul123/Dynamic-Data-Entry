@@ -13,6 +13,7 @@ import { RecordEditPage } from './pages/RecordEditPage'
 import { RecordsIndexPage } from './pages/RecordsIndexPage'
 import { RecordsPage } from './pages/RecordsPage'
 import RegistrationPage from './pages/RegistrationPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import { SubmissionPage } from './pages/SubmissionPage'
 import { UsersPage } from './pages/UsersPage'
 
@@ -23,6 +24,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegistrationPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route
             element={
               <ProtectedRoute>

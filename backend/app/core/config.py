@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import field_validator
+from pydantic import EmailStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 PRODUCTION_ENVIRONMENTS = {"production", "prod"}
@@ -59,6 +59,21 @@ class Settings(BaseSettings):
     # Per-IP auth rate limits (slowapi syntax, e.g. "5/minute", "3/hour")
     auth_login_rate_limit: str = "5/minute"
     auth_register_rate_limit: str = "3/minute"
+    auth_forgot_password_rate_limit: str = "3/minute"
+
+    # Password-reset flow
+    password_reset_token_expire_minutes: int = 15
+    # Base URL used to build the reset link that is emailed to the user.
+    frontend_base_url: str = "http://localhost:5173"
+
+    # SMTP / outbound email. If ``smtp_host`` is left unset the app cannot
+    # deliver mail and instead logs the reset link (dev convenience only);
+    # production deployments must configure a real SMTP relay.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    emails_from_email: EmailStr | None = None
 
 
 @lru_cache

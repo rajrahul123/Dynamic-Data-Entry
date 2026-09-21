@@ -1,8 +1,11 @@
 from app.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponse,
+    ForgotPasswordRequest,
+    GenericAuthResponse,
     LoginRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from app.schemas.form import (
@@ -36,12 +39,15 @@ __all__ = [
     "FieldReorder",
     "FieldSettings",
     "FieldUpdate",
+    "ForgotPasswordRequest",
     "FormCreate",
     "FormRead",
     "FormUpdate",
+    "GenericAuthResponse",
     "LoginRequest",
     "RecordFilter",
     "RegisterRequest",
+    "ResetPasswordRequest",
     "SubmissionCreate",
     "SubmissionDetail",
     "SubmissionListItem",

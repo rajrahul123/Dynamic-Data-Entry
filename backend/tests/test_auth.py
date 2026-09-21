@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
-from app.core.security import create_access_token
+from app.core.security import create_access_token, create_password_reset_token
 from app.models import User
 
 from .conftest import create_user, login_headers
@@ -198,6 +198,129 @@ class TestChangePassword:
                 "new_password": "newpass456",
                 "role": "admin",
             },
+        )
+
+        assert response.status_code == 422
+
+
+class TestForgotPassword:
+    def test_valid_email_returns_generic_success(self, client, db_session):
+        create_user(db_session, "forgot", "forgot@example.com", password="oldpass123")
+
+        response = client.post(
+            "/api/auth/forgot-password", json={"email": "forgot@example.com"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["detail"] == (
+            "If an account exists for that email, a password reset link has been sent."
+        )
+
+    def test_invalid_email_returns_same_generic_success(self, client):
+        response = client.post(
+            "/api/auth/forgot-password", json={"email": "ghost@example.com"}
+        )
+
+        assert response.status_code == 200
+        # Identical body to the existing-email case: no account enumeration.
+        assert response.json()["detail"] == (
+            "If an account exists for that email, a password reset link has been sent."
+        )
+
+    def test_malformed_email_rejected(self, client):
+        response = client.post(
+            "/api/auth/forgot-password", json={"email": "not-an-email"}
+        )
+
+        assert response.status_code == 422
+
+    def test_rate_limited_after_third_request_per_minute(self, client, db_session):
+        create_user(db_session, "flooded", "flooded@example.com", password="oldpass123")
+
+        for _ in range(3):
+            response = client.post(
+                "/api/auth/forgot-password", json={"email": "flooded@example.com"}
+            )
+            assert response.status_code == 200
+
+        response = client.post(
+            "/api/auth/forgot-password", json={"email": "flooded@example.com"}
+        )
+
+        assert response.status_code == 429
+
+
+class TestResetPassword:
+    def test_reset_with_valid_token(self, client, db_session):
+        user = create_user(db_session, "resetme", "resetme@example.com", password="oldpass123")
+        token = create_password_reset_token(str(user.id))
+
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": token, "new_password": "brandnew456"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["detail"] == "Your password has been reset successfully"
+
+        # Old password no longer works; new one does.
+        assert client.post(
+            "/api/auth/login", json={"username": "resetme", "password": "oldpass123"}
+        ).status_code == 401
+        assert client.post(
+            "/api/auth/login", json={"username": "resetme", "password": "brandnew456"}
+        ).status_code == 200
+
+    def test_expired_token_rejected(self, client, db_session):
+        user = create_user(db_session, "expired", "expired@example.com", password="oldpass123")
+        token = create_password_reset_token(str(user.id), expires_delta=timedelta(minutes=-1))
+
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": token, "new_password": "brandnew456"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "The reset token is invalid or has expired"
+
+        # Password unchanged.
+        assert client.post(
+            "/api/auth/login", json={"username": "expired", "password": "oldpass123"}
+        ).status_code == 200
+
+    def test_garbage_token_rejected(self, client):
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": "not.a.real.token", "new_password": "brandnew456"},
+        )
+
+        assert response.status_code == 400
+
+    def test_access_token_cannot_be_used_as_reset_token(self, client, db_session):
+        user = create_user(db_session, "confused", "confused@example.com", password="oldpass123")
+        access_token = create_access_token(str(user.id))
+
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": access_token, "new_password": "brandnew456"},
+        )
+
+        assert response.status_code == 400
+
+    def test_new_password_too_short_rejected(self, client, db_session):
+        user = create_user(db_session, "shortpw", "shortpw@example.com", password="oldpass123")
+        token = create_password_reset_token(str(user.id))
+
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": token, "new_password": "short"},
+        )
+
+        assert response.status_code == 422
+
+    def test_missing_fields_rejected(self, client):
+        response = client.post(
+            "/api/auth/reset-password", json={"new_password": "brandnew456"}
         )
 
         assert response.status_code == 422

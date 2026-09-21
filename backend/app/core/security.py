@@ -17,6 +17,7 @@ password_hash = PasswordHash.recommended()
 
 TOKEN_TYPE_FIELD = "type"
 ACCESS_TOKEN_TYPE = "access"
+PASSWORD_RESET_TOKEN_TYPE = "password_reset"
 
 
 def hash_password(password: str) -> str:
@@ -53,5 +54,44 @@ def decode_access_token(token: str) -> dict[str, Any]:
         token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
     )
     if payload.get(TOKEN_TYPE_FIELD) != ACCESS_TOKEN_TYPE:
+        raise InvalidTokenError("Invalid token type")
+    return payload
+
+
+def create_password_reset_token(
+    subject: str, expires_delta: timedelta | None = None
+) -> str:
+    """Create a short-lived, single-purpose JWT for password reset.
+
+    The token carries the user id in ``sub`` and an explicit ``type`` claim so
+    it can never be mistaken for (or replayed as) an access token.
+    """
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    expire = now + (
+        expires_delta
+        or timedelta(minutes=settings.password_reset_token_expire_minutes)
+    )
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "type": PASSWORD_RESET_TOKEN_TYPE,
+        "iat": now,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_password_reset_token(token: str) -> dict[str, Any]:
+    """Decode and validate a password-reset JWT.
+
+    Raises ``jwt.InvalidTokenError`` for expired, malformed, tampered, or
+    wrong-purpose tokens (e.g. an access token must not be usable to reset a
+    password).
+    """
+    settings = get_settings()
+    payload = jwt.decode(
+        token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+    )
+    if payload.get(TOKEN_TYPE_FIELD) != PASSWORD_RESET_TOKEN_TYPE:
         raise InvalidTokenError("Invalid token type")
     return payload

@@ -7,19 +7,30 @@ from the request body: only administrators can assign elevated roles.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from jwt import InvalidTokenError
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
+from app.core.email import send_password_reset_email
 from app.core.rate_limit import limiter
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    create_password_reset_token,
+    decode_password_reset_token,
+    hash_password,
+    verify_password,
+)
 from app.models import Role, User
 from app.schemas import (
     ChangePasswordRequest,
     ChangePasswordResponse,
+    ForgotPasswordRequest,
+    GenericAuthResponse,
     LoginRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserRead,
 )
@@ -130,3 +141,67 @@ def change_password(
     db.commit()
     db.refresh(user)
     return ChangePasswordResponse()
+
+
+@router.post("/forgot-password", response_model=GenericAuthResponse)
+@limiter.limit(_settings.auth_forgot_password_rate_limit)
+def forgot_password(
+    request: Request, response: Response, payload: ForgotPasswordRequest, db: DbSession
+) -> GenericAuthResponse:
+    """Request a password-reset link for an email address.
+
+    The response is deliberately identical whether or not the email exists so
+    the endpoint cannot be used to enumerate accounts. When SMTP is
+    configured a reset link is emailed; otherwise (development only) the link
+    is written to the application log instead.
+    """
+    generic_detail = "If an account exists for that email, a password reset link has been sent."
+
+    user = db.scalar(select(User).where(User.email == str(payload.email)))
+
+    if user is not None:
+        token = create_password_reset_token(str(user.id))
+        reset_link = f"{_settings.frontend_base_url}/reset-password?token={token}"
+        send_password_reset_email(str(user.email), reset_link)
+
+    return GenericAuthResponse(detail=generic_detail)
+
+
+@router.post("/reset-password", response_model=GenericAuthResponse)
+def reset_password(
+    payload: ResetPasswordRequest, db: DbSession
+) -> GenericAuthResponse:
+    """Set a new password using a valid, unexpired reset token.
+
+    The token is a short-lived JWT carrying the user id; both its signature
+    and its expiration are verified before the password is replaced.
+    """
+    try:
+        claims = decode_password_reset_token(payload.token)
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The reset token is invalid or has expired",
+        )
+
+    subject = claims.get("sub")
+    try:
+        user_id = int(subject)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The reset token is invalid or has expired",
+        )
+
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The reset token is invalid or has expired",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    db.add(user)
+    db.commit()
+
+    return GenericAuthResponse(detail="Your password has been reset successfully")
