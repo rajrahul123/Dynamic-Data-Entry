@@ -7,10 +7,12 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api import (
     auth_router,
+    billing_router,
     forms_router,
     health_router,
     records_router,
     submissions_router,
+    subscriptions_router,
     users_router,
 )
 from app.core.config import get_settings
@@ -58,6 +60,8 @@ app.include_router(users_router, prefix="/api", tags=["users"])
 app.include_router(forms_router, prefix="/api", tags=["forms"])
 app.include_router(submissions_router, prefix="/api", tags=["submissions"])
 app.include_router(records_router, prefix="/api", tags=["records"])
+app.include_router(subscriptions_router, prefix="/api", tags=["subscription"])
+app.include_router(billing_router, prefix="/api", tags=["billing"])
 
 
 @app.get("/")

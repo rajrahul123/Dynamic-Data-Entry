@@ -49,6 +49,7 @@ class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    tenant_id: int
     username: str
     email: EmailStr
     full_name: str | None

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
+import { PasswordField } from '../components/PasswordField'
 import { ApiError, forgotPassword, resetPassword } from '../lib/api'
 import { useAuth } from '../lib/auth-context'
 
@@ -162,9 +163,8 @@ function ResetPasswordPage() {
           <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="newPassword">
             New password
           </label>
-          <input
+          <PasswordField
             id="newPassword"
-            type="password"
             required
             autoComplete="new-password"
             value={newPassword}
@@ -177,9 +177,8 @@ function ResetPasswordPage() {
           <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="confirmPassword">
             Confirm new password
           </label>
-          <input
+          <PasswordField
             id="confirmPassword"
-            type="password"
             required
             autoComplete="new-password"
             value={confirmPassword}

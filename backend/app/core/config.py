@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     emails_from_email: EmailStr | None = "megteach34@gmail.com"
 
+    # Billing orchestration. Checkout is stubbed until a payment provider is
+    # wired up: with ``billing_auto_activate`` enabled (development default)
+    # a checkout request activates the picked plan immediately so the full
+    # gating flow can be exercised; set it to ``false`` in production so
+    # checkout only returns a placeholder billing URL.
+    billing_auto_activate: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

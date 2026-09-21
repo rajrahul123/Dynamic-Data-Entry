@@ -13,7 +13,12 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import CurrentAdmin, DbSession, require_admin
+from app.api.deps import (
+    ActiveSubscription,
+    CurrentAdmin,
+    DbSession,
+    require_admin,
+)
 from app.models import FieldType, Form, FormField, FormStatus
 from app.schemas import (
     FieldCreate,
@@ -109,12 +114,18 @@ def _resolve_settings(field_type: FieldType, settings: FieldSettings | None) -> 
 
 
 @router.post("", response_model=FormRead, status_code=status.HTTP_201_CREATED)
-def create_form(payload: FormCreate, db: DbSession, admin: CurrentAdmin) -> Form:
+def create_form(
+    payload: FormCreate,
+    db: DbSession,
+    admin: CurrentAdmin,
+    _subscription: ActiveSubscription,
+) -> Form:
     form = Form(
         name=payload.name,
         description=payload.description,
         status=FormStatus.draft,
         created_by=admin.id,
+        tenant_id=admin.tenant_id,
     )
     db.add(form)
     db.commit()
@@ -146,7 +157,8 @@ def get_form(form_id: int, db: DbSession) -> Form:
 
 @router.patch("/{form_id}", response_model=FormRead)
 def update_form(
-    form_id: int, payload: FormUpdate, db: DbSession, admin: CurrentAdmin
+    form_id: int, payload: FormUpdate, db: DbSession, admin: CurrentAdmin,
+    _subscription: ActiveSubscription,
 ) -> Form:
     form = _get_form(db, form_id)
     _require_draft(form)
@@ -158,7 +170,9 @@ def update_form(
 
 
 @router.delete("/{form_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_form(form_id: int, db: DbSession, admin: CurrentAdmin) -> None:
+def delete_form(
+    form_id: int, db: DbSession, admin: CurrentAdmin, _subscription: ActiveSubscription
+) -> None:
     form = _get_form(db, form_id)
     _require_draft(form)
     db.delete(form)
@@ -166,7 +180,9 @@ def delete_form(form_id: int, db: DbSession, admin: CurrentAdmin) -> None:
 
 
 @router.post("/{form_id}/publish", response_model=FormRead)
-def publish_form(form_id: int, db: DbSession, admin: CurrentAdmin) -> Form:
+def publish_form(
+    form_id: int, db: DbSession, admin: CurrentAdmin, _subscription: ActiveSubscription
+) -> Form:
     form = _get_form(db, form_id)
     if form.status is not FormStatus.draft:
         raise _conflict("Only draft forms can be published")
@@ -180,7 +196,9 @@ def publish_form(form_id: int, db: DbSession, admin: CurrentAdmin) -> Form:
 
 
 @router.post("/{form_id}/archive", response_model=FormRead)
-def archive_form(form_id: int, db: DbSession, admin: CurrentAdmin) -> Form:
+def archive_form(
+    form_id: int, db: DbSession, admin: CurrentAdmin, _subscription: ActiveSubscription
+) -> Form:
     form = _get_form(db, form_id)
     if form.status is FormStatus.archived:
         raise _conflict("Form is already archived")
@@ -197,7 +215,8 @@ def archive_form(form_id: int, db: DbSession, admin: CurrentAdmin) -> Form:
 
 @router.post("/{form_id}/fields", response_model=FieldRead, status_code=status.HTTP_201_CREATED)
 def create_field(
-    form_id: int, payload: FieldCreate, db: DbSession, admin: CurrentAdmin
+    form_id: int, payload: FieldCreate, db: DbSession, admin: CurrentAdmin,
+    _subscription: ActiveSubscription,
 ) -> FormField:
     form = _get_form(db, form_id)
     _require_draft(form)
@@ -205,6 +224,7 @@ def create_field(
     settings = _resolve_settings(payload.field_type, payload.settings)
 
     field = FormField(
+        tenant_id=form.tenant_id,
         form_id=form_id,
         field_key=payload.field_key,
         label=payload.label,
@@ -237,6 +257,7 @@ def update_field(
     payload: FieldUpdate,
     db: DbSession,
     admin: CurrentAdmin,
+    _subscription: ActiveSubscription,
 ) -> FormField:
     form = _get_form(db, form_id)
     _require_draft(form)
@@ -274,7 +295,10 @@ def update_field(
 
 
 @router.delete("/{form_id}/fields/{field_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_field(form_id: int, field_id: int, db: DbSession, admin: CurrentAdmin) -> None:
+def delete_field(
+    form_id: int, field_id: int, db: DbSession, admin: CurrentAdmin,
+    _subscription: ActiveSubscription,
+) -> None:
     form = _get_form(db, form_id)
     _require_draft(form)
     field = _get_field(db, form_id, field_id)
@@ -284,7 +308,8 @@ def delete_field(form_id: int, field_id: int, db: DbSession, admin: CurrentAdmin
 
 @router.post("/{form_id}/fields/reorder", response_model=list[FieldRead])
 def reorder_fields(
-    form_id: int, payload: FieldReorder, db: DbSession, admin: CurrentAdmin
+    form_id: int, payload: FieldReorder, db: DbSession, admin: CurrentAdmin,
+    _subscription: ActiveSubscription,
 ) -> list[FormField]:
     form = _get_form(db, form_id)
     _require_draft(form)

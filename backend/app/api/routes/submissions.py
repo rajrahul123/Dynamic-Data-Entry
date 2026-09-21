@@ -24,7 +24,12 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import CurrentOperator, CurrentUser, DbSession
+from app.api.deps import (
+    ActiveSubscription,
+    CurrentOperator,
+    CurrentUser,
+    DbSession,
+)
 from app.core.submission_validation import validate_submission_data
 from app.models import Form, FormStatus, Submission
 from app.schemas import (
@@ -129,6 +134,7 @@ def create_submission(
     payload: SubmissionCreate,
     db: DbSession,
     user: CurrentOperator,
+    _subscription: ActiveSubscription,
 ) -> Submission:
     """Accept a new submission for a published form (admin/operator).
 
@@ -148,6 +154,7 @@ def create_submission(
 
     submission = Submission(
         form_id=form.id,
+        tenant_id=form.tenant_id,
         submitted_by=user.id,
         data=payload.data,
     )
@@ -229,6 +236,7 @@ def export_submissions(
     form_id: int,
     db: DbSession,
     user: CurrentUser,
+    _subscription: ActiveSubscription,
     format: str = Query(...),
     search: str | None = Query(default=None),
     filters: str | None = Query(default=None),
@@ -284,6 +292,7 @@ def export_single_submission(
     submission_id: int,
     db: DbSession,
     user: CurrentUser,
+    _subscription: ActiveSubscription,
     format: str = Query(...),
 ) -> Response:
     """Export ONE record as a form-style PDF (any authenticated role).
@@ -338,6 +347,7 @@ def update_submission(
     payload: SubmissionUpdate,
     db: DbSession,
     user: CurrentOperator,
+    _subscription: ActiveSubscription,
 ) -> dict:
     """Edit an existing record (admin/operator; viewer -> 403).
 
@@ -370,6 +380,7 @@ def delete_submission(
     submission_id: int,
     db: DbSession,
     user: CurrentOperator,
+    _subscription: ActiveSubscription,
 ) -> None:
     """Delete a single record (admin/operator; viewer -> 403).
 

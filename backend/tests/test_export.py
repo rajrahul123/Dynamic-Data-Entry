@@ -418,6 +418,7 @@ class TestExportColumns:
         db_session.add(Submission(
             form_id=form_id,
             submitted_by=root.id,
+            tenant_id=root.tenant_id,
             data={"full_name": "Stray", "department": "eng", "secret_key": "zzz", "mystery": True},
         ))
         db_session.commit()

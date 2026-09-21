@@ -89,6 +89,7 @@ def create_user(payload: UserCreate, db: DbSession, admin: CurrentAdmin) -> User
         full_name=payload.full_name,
         role=payload.role,
         is_active=True,
+        tenant_id=admin.tenant_id,
         created_by_id=admin.id,
     )
     db.add(user)

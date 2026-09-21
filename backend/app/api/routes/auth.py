@@ -20,7 +20,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.models import Role, User
+from app.models import PlanType, Role, Subscription, SubscriptionStatus, Tenant, User
 from app.schemas import (
     ChangePasswordRequest,
     ChangePasswordResponse,
@@ -60,12 +60,20 @@ def register(
 
     The role is always ``Role.viewer``; a role (or any other field) sent by the
     client is rejected outright by the schema, preventing privilege escalation.
+
+    Every self-signup also creates its own organization (``Tenant``) so the
+    new account starts with a clean, fully isolated data boundary, plus a
+    free-plan subscription so the billing lifecycle has a starting point.
     """
     if db.scalar(select(User).where(User.username == payload.username)) is not None:
         raise _conflict("Username is already taken")
 
     if db.scalar(select(User).where(User.email == payload.email)) is not None:
         raise _conflict("Email is already registered")
+
+    tenant = Tenant(name=f"{payload.full_name or payload.username}'s organization")
+    db.add(tenant)
+    db.flush()
 
     user = User(
         username=payload.username,
@@ -74,8 +82,19 @@ def register(
         full_name=payload.full_name,
         role=Role.viewer,
         is_active=True,
+        tenant_id=tenant.id,
     )
     db.add(user)
+    db.flush()
+
+    db.add(
+        Subscription(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            plan_type=PlanType.free,
+            status=SubscriptionStatus.active,
+        )
+    )
     try:
         db.commit()
     except IntegrityError:

@@ -1,8 +1,16 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
-import { ApiError, changePassword } from '../lib/api'
+import {
+  ApiError,
+  changePassword,
+  checkout,
+  fetchSubscription,
+  type PlanType,
+  type Subscription,
+} from '../lib/api'
 import { useAuth } from '../lib/auth-context'
+import { PasswordField } from './PasswordField'
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return [
@@ -29,6 +37,36 @@ export function AppShell() {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSaved, setPasswordSaved] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [upgrading, setUpgrading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSubscription()
+      .then((data) => {
+        if (!cancelled) setSubscription(data)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (err instanceof ApiError && err.status === 404) {
+          setSubscription({
+            plan_type: 'free',
+            status: 'active',
+            expires_at: null,
+            provider_customer_id: null,
+          })
+          return
+        }
+        setSubscriptionError(err instanceof Error ? err.message : String(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   if (!user) return null
 
@@ -108,12 +146,38 @@ export function AppShell() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400">
+            <span className="flex items-center gap-1.5 text-xs text-slate-400">
+              {subscription && (
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                    subscription.plan_type === 'free'
+                      ? 'bg-slate-700 text-slate-300'
+                      : 'bg-emerald-700 text-emerald-100'
+                  }`}
+                  title={subscription.status}
+                >
+                  {subscription.plan_type}
+                </span>
+              )}
               {user.full_name || user.username}
               <span className="ml-1 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] uppercase text-slate-200">
                 {user.role}
               </span>
             </span>
+            {subscriptionError && (
+              <span className="text-[10px] text-red-400" title={subscriptionError}>
+                plan: unavailable
+              </span>
+            )}
+            {user.role === 'admin' && (
+              <button
+                type="button"
+                onClick={() => setUpgradeOpen(true)}
+                className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-slate-600"
+              >
+                Manage Plan
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPasswordModalOpen(true)}
@@ -152,9 +216,8 @@ export function AppShell() {
             <label className="mt-5 block text-xs font-medium text-slate-600" htmlFor="currentPassword">
               Current password
             </label>
-            <input
+            <PasswordField
               id="currentPassword"
-              type="password"
               autoComplete="current-password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
@@ -167,9 +230,8 @@ export function AppShell() {
             <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="newPassword">
               New password
             </label>
-            <input
+            <PasswordField
               id="newPassword"
-              type="password"
               autoComplete="new-password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
@@ -182,9 +244,8 @@ export function AppShell() {
             <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="confirmPassword">
               Confirm new password
             </label>
-            <input
+            <PasswordField
               id="confirmPassword"
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
@@ -223,6 +284,74 @@ export function AppShell() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+    {upgradeOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 px-6"
+          onClick={() => setUpgradeOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold tracking-tight text-slate-900">Manage plan</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Your workspace runs on the{' '}
+              <span className="font-semibold text-slate-700">
+                {subscription?.plan_type ?? 'free'}
+              </span>{' '}
+              plan. Choose a paid plan to unlock form builder, data entry and exports.
+            </p>
+
+            {upgradeError && (
+              <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                {upgradeError}
+              </p>
+            )}
+
+            <div className="mt-5 space-y-3">
+              {(['monthly', 'yearly'] as PlanType[]).map((plan) => (
+                <button
+                  key={plan}
+                  type="button"
+                  disabled={upgrading}
+                  onClick={async () => {
+                    setUpgrading(true)
+                    setUpgradeError(null)
+                    try {
+                      const result = await checkout(plan)
+                      setSubscription(result.subscription)
+                      if (result.checkout_url) {
+                        window.location.href = result.checkout_url
+                      } else {
+                        setUpgradeOpen(false)
+                      }
+                    } catch (err) {
+                      setUpgradeError(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setUpgrading(false)
+                    }
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <span className="capitalize">{plan}</span>
+                  <span className="text-slate-400">{plan === 'monthly' ? '$19 / mo' : '$190 / yr'}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setUpgradeOpen(false)}
+                disabled={upgrading}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

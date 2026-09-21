@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 
+import { PasswordField } from '../components/PasswordField'
 import {
   createUser,
   listUsers,
@@ -217,14 +218,14 @@ export function UsersPage() {
             onChange={(event) => setField('full_name', event.target.value)}
             className="col-span-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
           />
-          <input
-            type="password"
+          <PasswordField
+            wrapperClassName="col-span-1"
             required
             minLength={8}
             placeholder="Password"
             value={form.password}
             onChange={(event) => setField('password', event.target.value)}
-            className="col-span-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
           />
           <div className="col-span-1 flex items-center gap-2">
             <select

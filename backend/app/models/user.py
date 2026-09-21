@@ -13,6 +13,9 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     username: Mapped[str] = mapped_column(
         String(50), unique=True, index=True, nullable=False
     )
@@ -71,6 +74,11 @@ class User(TimestampMixin, Base):
         back_populates="updated_by",
         passive_deletes=True,
     )
+
+    subscriptions: Mapped[list["Subscription"]] = relationship(
+        back_populates="user", passive_deletes=True
+    )
+    tenant: Mapped["Tenant"] = relationship(back_populates="users")
 
     submissions: Mapped[list["Submission"]] = relationship(
         back_populates="submitted_by_user", passive_deletes=True

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 
+import { PasswordField } from '../components/PasswordField'
 import { ApiError, register } from '../lib/api'
 import { useAuth } from '../lib/auth-context'
 
@@ -161,9 +162,8 @@ function RegistrationPage() {
         <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="password">
           Password
         </label>
-        <input
+        <PasswordField
           id="password"
-          type="password"
           required
           autoComplete="new-password"
           value={password}
@@ -176,9 +176,8 @@ function RegistrationPage() {
         <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="confirmPassword">
           Confirm password
         </label>
-        <input
+        <PasswordField
           id="confirmPassword"
-          type="password"
           required
           autoComplete="new-password"
           value={confirmPassword}

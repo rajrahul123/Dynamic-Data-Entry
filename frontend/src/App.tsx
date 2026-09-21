@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import { FormBuilderPage } from './pages/FormBuilderPage'
 import FormCreatePage from './pages/FormCreatePage'
 import { FormsPage } from './pages/FormsPage'
+import { LandingPage } from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import { RecordDetailPage } from './pages/RecordDetailPage'
 import { RecordEditPage } from './pages/RecordEditPage'
@@ -22,6 +23,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegistrationPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />

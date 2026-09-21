@@ -50,6 +50,9 @@ class Form(TimestampMixin, Base):
     __tablename__ = "forms"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[FormStatus] = mapped_column(
@@ -73,6 +76,7 @@ class Form(TimestampMixin, Base):
     submissions: Mapped[list["Submission"]] = relationship(
         back_populates="form", passive_deletes=True
     )
+    tenant: Mapped["Tenant"] = relationship(back_populates="forms")
 
 
 class FormField(TimestampMixin, Base):
@@ -84,6 +88,9 @@ class FormField(TimestampMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     form_id: Mapped[int] = mapped_column(
         ForeignKey("forms.id", ondelete="CASCADE"), nullable=False, index=True
     )

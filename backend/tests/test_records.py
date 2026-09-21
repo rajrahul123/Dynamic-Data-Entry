@@ -587,7 +587,8 @@ class TestLifecycle:
         admin = login_headers(client, "root", ADMIN_PASSWORD)
         form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS, status="draft")
         persisted = Submission(
-            form_id=form_id, submitted_by=admin_user.id, data=VALID_EMPLOYEE_DATA
+            form_id=form_id, submitted_by=admin_user.id, tenant_id=admin_user.tenant_id,
+            data=VALID_EMPLOYEE_DATA,
         )
         db_session.add(persisted)
         db_session.commit()
@@ -605,7 +606,8 @@ class TestLifecycle:
         admin = login_headers(client, "root", ADMIN_PASSWORD)
         form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS, status="draft")
         persisted = Submission(
-            form_id=form_id, submitted_by=admin_user.id, data=VALID_EMPLOYEE_DATA
+            form_id=form_id, submitted_by=admin_user.id, tenant_id=admin_user.tenant_id,
+            data=VALID_EMPLOYEE_DATA,
         )
         db_session.add(persisted)
         db_session.commit()

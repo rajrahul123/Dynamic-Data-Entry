@@ -23,6 +23,9 @@ class Submission(TimestampMixin, Base):
     __tablename__ = "submissions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     form_id: Mapped[int] = mapped_column(
         ForeignKey("forms.id", ondelete="RESTRICT"), nullable=False, index=True
     )

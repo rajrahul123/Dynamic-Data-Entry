@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
+import { PasswordField } from '../components/PasswordField'
 import { useAuth } from '../lib/auth-context'
 
 function LoginPage() {
@@ -84,9 +85,8 @@ function LoginPage() {
             Forgot password?
           </Link>
         </div>
-        <input
+        <PasswordField
           id="password"
-          type="password"
           required
           autoComplete="current-password"
           value={password}

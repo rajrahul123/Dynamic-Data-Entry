@@ -15,6 +15,7 @@ export interface UserRef {
 
 export interface User {
   id: number
+  tenant_id: number
   username: string
   email: string
   full_name: string | null
@@ -448,6 +449,43 @@ export interface SubmissionQueryOptions {
 }
 
 export type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'sql' | 'pdf-form'
+
+export type PlanType = 'free' | 'monthly' | 'yearly'
+export type SubscriptionStatus = 'active' | 'inactive' | 'expired' | 'canceled'
+
+export interface Plan {
+  key: PlanType
+  name: string
+  description: string
+  price_usd: number
+}
+
+export interface Subscription {
+  plan_type: PlanType
+  status: SubscriptionStatus
+  expires_at: string | null
+  provider_customer_id: string | null
+}
+
+export interface CheckoutResponse {
+  checkout_url: string | null
+  subscription: Subscription
+}
+
+export async function fetchPlans(): Promise<Plan[]> {
+  return request<Plan[]>('/api/billing/plans', {}, false)
+}
+
+export async function fetchSubscription(): Promise<Subscription> {
+  return request<Subscription>('/api/subscription')
+}
+
+export async function checkout(plan: PlanType): Promise<CheckoutResponse> {
+  return request<CheckoutResponse>('/api/subscription/checkout', {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  })
+}
 
 export interface ExportResult {
   blob: Blob

@@ -153,7 +153,12 @@ class TestRegisteredUserFlow:
 
         assert response.status_code == 403
 
-    def test_admin_management_still_works_and_sees_registered_user(self, client, db_session):
+    def test_admin_management_still_works_and_is_tenant_scoped(self, client, db_session):
+        """Admin tooling keeps working, but is isolated per organization.
+
+        A self-registered user provisions their *own* tenant, so an admin of
+        another organization can neither see nor manage that account.
+        """
         admin = create_user(db_session, "root", "root@example.com", password="secret123", role=Role.admin)
         admin_headers = login_headers(client, "root", "secret123")
 
@@ -163,17 +168,17 @@ class TestRegisteredUserFlow:
         assert response.status_code == 200
         usernames = [u["username"] for u in response.json()]
         assert "root" in usernames
-        assert "newbie" in usernames
+        assert "newbie" not in usernames
 
         registered = db_session.scalar(select(User).where(User.username == "newbie"))
         assert registered is not None
         assert registered.role is Role.viewer
 
+        # Cross-tenant management attempts resolve to "not found".
         patch = client.patch(
             f"/api/users/{registered.id}",
             headers=admin_headers,
             json={"role": "operator"},
         )
-        assert patch.status_code == 200
-        assert patch.json()["role"] == "operator"
+        assert patch.status_code == 404
         _ = admin
