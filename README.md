@@ -71,7 +71,8 @@ dynamic-data-entry-platform/
 │   ├── app/
 │   │   ├── api/         Routers: auth, users, forms, submissions
 │   │   │   └── deps.py  Auth/role dependencies (the real security boundary)
-│   │   ├── core/        Settings, database, security, submission_validation
+│   │   ├── core/        Settings, database, security, rate_limit,
+│   │   │                payload_limits, submission_validation
 │   │   ├── models/      Declarative base, User, Form, FormField, Submission
 │   │   └── schemas/     Pydantic request/response models
 │   ├── scripts/         create_admin.py (initial administrator CLI)
@@ -118,7 +119,9 @@ Required backend variables:
   `python -c "import secrets; print(secrets.token_urlsafe(64))"`
 
 Optional: `ENVIRONMENT`, `DEBUG`, `CORS_ORIGINS`, `JWT_ALGORITHM`
-(default `HS256`), `ACCESS_TOKEN_EXPIRE_MINUTES` (default `30`).
+(default `HS256`), `ACCESS_TOKEN_EXPIRE_MINUTES` (default `30`),
+`AUTH_LOGIN_RATE_LIMIT` (default `5/minute`), `AUTH_REGISTER_RATE_LIMIT`
+(default `3/minute`).
 
 Real secrets are never committed; `.env*` files are git-ignored.
 

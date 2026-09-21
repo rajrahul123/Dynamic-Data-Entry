@@ -533,3 +533,123 @@ class TestIsolation:
             "not_a_field": 1,
         })
         assert response.status_code == 422
+
+
+class TestSubmissionPayloadLimits:
+    def test_excess_keys_rejected_with_422(self, client, db_session):
+        admin = _admin(client, db_session)
+        form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS)
+
+        data = {f"key_{i}": i for i in range(101)}
+
+        response = _submit(client, admin, form_id, data)
+
+        assert response.status_code == 422
+        message = response.json()["detail"][0]["msg"]
+        assert "maximum of 100 fields" in message
+
+    def test_excess_keys_space_ok_when_at_limit(self, client, db_session):
+        from app.core.payload_limits import MAX_SUBMISSION_FIELDS
+
+        admin = _admin(client, db_session)
+        form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS)
+
+        data = {f"key_{i}": "x" for i in range(MAX_SUBMISSION_FIELDS)}
+
+        body = _submit(client, admin, form_id, data)
+
+        # The payload itself passes the resource guard (not 422 from limits);
+        # unknown fields then fail dynamic validation, i.e. a 422 that lists
+        # unknown fields rather than the size guard.
+        assert body.status_code == 422
+        assert "maximum of 100 fields" not in str(body.json()["detail"])
+        assert any("Unknown field" in e["msg"] for e in body.json()["detail"])
+
+    def test_deeply_nested_data_rejected_with_422(self, client, db_session):
+        admin = _admin(client, db_session)
+        form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS)
+
+        nested = "leaf"
+        for _ in range(9):
+            nested = {"nested": nested}
+
+        response = _submit(client, admin, form_id, {"root": nested})
+
+        assert response.status_code == 422
+        message = response.json()["detail"][0]["msg"]
+        assert "nesting depth" in message
+
+    def test_oversized_serialized_payload_rejected_with_422(self, client, db_session):
+        admin = _admin(client, db_session)
+        form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS)
+
+        response = _submit(client, admin, form_id, {"payload": "x" * 300000})
+
+        assert response.status_code == 422
+        message = response.json()["detail"][0]["msg"]
+        assert "serialized size" in message
+
+    def test_unconfigured_long_string_rejected_with_422(self, client, db_session):
+        from app.core.payload_limits import MAX_UNCONFIGURED_STRING_LENGTH
+
+        admin = _admin(client, db_session)
+        fields_with_bio = EMPLOYEE_FIELDS + [
+            {"field_key": "bio", "label": "Bio", "field_type": "textarea"}
+        ]
+        form_id = _create_form(client, admin, fields=fields_with_bio)
+
+        response = _submit(
+            client,
+            admin,
+            form_id,
+            {**VALID_EMPLOYEE_DATA, "bio": "x" * (MAX_UNCONFIGURED_STRING_LENGTH + 1)},
+        )
+
+        assert response.status_code == 422
+        assert any(
+            "Must be at most" in e["msg"] for e in response.json()["detail"]
+        )
+
+    def test_configured_max_length_wins_over_unconfigured_cap(self, client, db_session):
+        from app.core.payload_limits import MAX_UNCONFIGURED_STRING_LENGTH
+
+        admin = _admin(client, db_session)
+        fields_with_bio = EMPLOYEE_FIELDS + [
+            {
+                "field_key": "bio",
+                "label": "Bio",
+                "field_type": "textarea",
+                "settings": {"max_length": 40},
+            }
+        ]
+        form_id = _create_form(client, admin, fields=fields_with_bio)
+
+        # The configured max_length (40) governs, even though the string also
+        # exceeds the unconfigured default cap (10000).
+        over_configured = _submit(
+            client,
+            admin,
+            form_id,
+            {**VALID_EMPLOYEE_DATA, "bio": "x" * (MAX_UNCONFIGURED_STRING_LENGTH + 1)},
+        )
+        assert over_configured.status_code == 422
+        assert any("at most 40" in e["msg"] for e in over_configured.json()["detail"])
+
+        # A value within the configured max is accepted.
+        within_configured = _submit(
+            client, admin, form_id, {**VALID_EMPLOYEE_DATA, "bio": "x" * 40}
+        )
+        assert within_configured.status_code == 201
+
+    def test_oversized_update_payload_rejected_with_422(self, client, db_session):
+        admin = _admin(client, db_session)
+        form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS)
+        record_id = _submit(client, admin, form_id, VALID_EMPLOYEE_DATA).json()["id"]
+
+        response = client.patch(
+            f"/api/forms/{form_id}/submissions/{record_id}",
+            headers=admin,
+            json={"data": {f"key_{i}": i for i in range(101)}},
+        )
+
+        assert response.status_code == 422

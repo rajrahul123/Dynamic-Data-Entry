@@ -9,7 +9,9 @@ persistence (see ``app.core.submission_validation``).
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from app.core.payload_limits import validate_payload
 
 
 class RecordFilter(BaseModel):
@@ -26,8 +28,15 @@ class RecordFilter(BaseModel):
     value: Any
 
 
+def _guard_payload(data: dict[str, Any]) -> dict[str, Any]:
+    """Reject payloads that exceed resource limits (key count, depth, size)."""
+    return validate_payload(data)
+
+
 class SubmissionCreate(BaseModel):
     data: dict[str, Any] = {}
+
+    _validate_data = field_validator("data")(_guard_payload)
 
 
 class SubmissionRead(BaseModel):
@@ -50,6 +59,8 @@ class SubmissionUpdate(BaseModel):
     """
 
     data: dict[str, Any] = {}
+
+    _validate_data = field_validator("data")(_guard_payload)
 
 
 class SubmissionListItem(BaseModel):

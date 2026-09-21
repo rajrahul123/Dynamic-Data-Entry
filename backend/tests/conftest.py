@@ -22,9 +22,16 @@ from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.core.database import get_db  # noqa: E402
+from app.core.rate_limit import limiter  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Base, Role, User  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter() -> None:
+    """Give every test a clean per-IP window for the auth rate limiter."""
+    limiter.reset()
 
 
 def _make_engine():

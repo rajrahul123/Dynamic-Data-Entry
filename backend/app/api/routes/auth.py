@@ -6,16 +6,20 @@ from the request body: only administrators can assign elevated roles.
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession
+from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models import Role, User
 from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_settings = get_settings()
 
 
 def _conflict(message: str) -> HTTPException:
@@ -32,7 +36,10 @@ def _invalid_credentials() -> HTTPException:
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: DbSession) -> User:
+@limiter.limit(_settings.auth_register_rate_limit)
+def register(
+    request: Request, response: Response, payload: RegisterRequest, db: DbSession
+) -> User:
     """Create a public account with the Viewer role.
 
     The role is always ``Role.viewer``; a role (or any other field) sent by the
@@ -63,7 +70,10 @@ def register(payload: RegisterRequest, db: DbSession) -> User:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
+@limiter.limit(_settings.auth_login_rate_limit)
+def login(
+    request: Request, response: Response, payload: LoginRequest, db: DbSession
+) -> TokenResponse:
     user = db.scalar(
         select(User).where(
             or_(User.username == payload.username, User.email == payload.username)

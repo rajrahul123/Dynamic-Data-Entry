@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
+    # Per-IP auth rate limits (slowapi syntax, e.g. "5/minute", "3/hour")
+    auth_login_rate_limit: str = "5/minute"
+    auth_register_rate_limit: str = "3/minute"
+
 
 @lru_cache
 def get_settings() -> Settings:

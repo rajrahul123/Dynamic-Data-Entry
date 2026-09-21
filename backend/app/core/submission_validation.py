@@ -15,6 +15,7 @@ from datetime import date, datetime, time
 from email_validator import EmailNotValidError, validate_email
 import re
 
+from app.core.payload_limits import MAX_UNCONFIGURED_STRING_LENGTH
 from app.models import FieldType, FormField
 
 _MISSING = object()
@@ -65,6 +66,8 @@ def _validate_text_like(field: FormField, value: object) -> str | None:
         return f"Must be at least {min_length} characters"
     if max_length is not None and len(value) > int(max_length):
         return f"Must be at most {max_length} characters"
+    if max_length is None and len(value) > MAX_UNCONFIGURED_STRING_LENGTH:
+        return f"Must be at most {MAX_UNCONFIGURED_STRING_LENGTH} characters"
     return None
 
 
