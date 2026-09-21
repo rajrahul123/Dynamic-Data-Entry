@@ -18,10 +18,25 @@ const EMPTY_FORM = {
   role: 'viewer' as Role,
 }
 
+interface EditForm {
+  full_name: string
+  email: string
+  role: Role
+  is_active: boolean
+}
+
 function roleBadgeClass(role: Role) {
   if (role === 'admin') return 'bg-slate-900 text-white'
   if (role === 'operator') return 'bg-slate-600 text-white'
   return 'bg-slate-200 text-slate-700'
+}
+
+function creatorLabel(user: User) {
+  return user.created_by ? `Created by: ${user.created_by.username}` : 'Created by: System'
+}
+
+function editorLabel(user: User) {
+  return user.updated_by ? `Last updated by: ${user.updated_by.username}` : 'No prior edits'
 }
 
 export function UsersPage() {
@@ -31,6 +46,16 @@ export function UsersPage() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  const [editing, setEditing] = useState<User | null>(null)
+  const [editForm, setEditForm] = useState<EditForm>({
+    full_name: '',
+    email: '',
+    role: 'viewer',
+    is_active: true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     try {
@@ -64,6 +89,10 @@ export function UsersPage() {
 
   function setField(field: keyof typeof EMPTY_FORM, value: string) {
     setForm((previous) => ({ ...previous, [field]: value }))
+  }
+
+  function setEditField(field: keyof EditForm, value: string | boolean) {
+    setEditForm((previous) => ({ ...previous, [field]: value }))
   }
 
   async function handleCreate(event: FormEvent) {
@@ -111,12 +140,53 @@ export function UsersPage() {
     }
   }
 
+  function openEditModal(user: User) {
+    setEditing(user)
+    setEditForm({
+      full_name: user.full_name ?? '',
+      email: user.email,
+      role: user.role,
+      is_active: user.is_active,
+    })
+    setEditError(null)
+  }
+
+  function closeEditModal() {
+    setEditing(null)
+    setEditError(null)
+  }
+
+  async function handleSaveEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!editing) return
+    setSaving(true)
+    setEditError(null)
+    try {
+      await updateUser(editing.id, {
+        full_name: editForm.full_name.trim() || null,
+        email: editForm.email.trim(),
+        role: editForm.role,
+        is_active: editForm.is_active,
+      })
+      setEditing(null)
+      setNotice(`Profile for ${editing.username} updated.`)
+      await reload()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputClass =
+    'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none'
+
   return (
     <div className="space-y-6">
       <header>
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">User management</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Admin-only. Create accounts and manage roles and status.
+          Admin-only. Create accounts and manage roles, profiles, and status.
         </p>
       </header>
 
@@ -193,6 +263,7 @@ export function UsersPage() {
               <th className="px-4 py-3 font-medium">User</th>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Role</th>
+              <th className="px-4 py-3 font-medium">Created/Assigned By</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Actions</th>
             </tr>
@@ -200,7 +271,7 @@ export function UsersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
                   Loading users…
                 </td>
               </tr>
@@ -226,6 +297,11 @@ export function UsersPage() {
                     </select>
                   </td>
                   <td className="px-4 py-3">
+                    <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      {creatorLabel(user)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                         user.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
@@ -235,13 +311,22 @@ export function UsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleActive(user)}
-                      className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      {user.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(user)}
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(user)}
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        {user.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -249,6 +334,104 @@ export function UsersPage() {
           </tbody>
         </table>
       </section>
+
+      {editing && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 px-6"
+          onClick={saving ? undefined : closeEditModal}
+        >
+          <form
+            onSubmit={handleSaveEdit}
+            noValidate
+            className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold tracking-tight text-slate-900">
+              Edit user — {editing.username}
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">{creatorLabel(editing)}</p>
+
+            <label className="mt-5 block text-xs font-medium text-slate-600" htmlFor="editFullName">
+              Full name
+            </label>
+            <input
+              id="editFullName"
+              type="text"
+              autoComplete="off"
+              value={editForm.full_name}
+              onChange={(event) => setEditField('full_name', event.target.value)}
+              className={inputClass}
+            />
+
+            <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="editEmail">
+              Email
+            </label>
+            <input
+              id="editEmail"
+              type="email"
+              required
+              autoComplete="off"
+              value={editForm.email}
+              onChange={(event) => setEditField('email', event.target.value)}
+              className={inputClass}
+            />
+
+            <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="editRole">
+              Role
+            </label>
+            <select
+              id="editRole"
+              value={editForm.role}
+              onChange={(event) => setEditField('role', event.target.value as Role)}
+              className={inputClass}
+            >
+              {ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={editForm.is_active}
+                onChange={(event) => setEditField('is_active', event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Account active
+            </label>
+
+            <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              {editorLabel(editing)}
+            </p>
+
+            {editError && (
+              <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                {editError}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeEditModal}
+                disabled={saving}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

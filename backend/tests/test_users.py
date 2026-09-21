@@ -121,6 +121,42 @@ class TestCreateUser:
         assert "password_hash" not in raw
         assert "passw0rd!x" not in raw
 
+    def test_created_user_records_creating_admin(self, client, db_session):
+        headers = _admin(client, db_session)
+        admin = db_session.scalar(select(User).where(User.username == "root"))
+        assert admin is not None
+
+        response = client.post(
+            "/api/users",
+            headers=headers,
+            json={
+                "username": "tracked",
+                "email": "tracked@example.com",
+                "password": "passw0rd!x",
+            },
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["created_by"] == {
+            "id": admin.id,
+            "username": "root",
+            "email": "root@example.com",
+        }
+        assert body["updated_by"] is None
+
+    def test_registered_user_has_no_creator(self, client):
+        register_response = client.post(
+            "/api/auth/register",
+            json={
+                "username": "self.serve",
+                "email": "self.serve@example.com",
+                "password": "passw0rd!x",
+            },
+        )
+        assert register_response.status_code == 201
+        assert register_response.json()["created_by"] is None
+
 
 class TestListUsers:
     def test_list_users(self, client, db_session):
@@ -131,9 +167,12 @@ class TestListUsers:
         response = client.get("/api/users", headers=headers)
 
         assert response.status_code == 200
-        usernames = [u["username"] for u in response.json()]
+        users = response.json()
+        usernames = [u["username"] for u in users]
         assert "first" in usernames
         assert "second" in usernames
+        # Every serialized user includes the creator/editor trail.
+        assert all("created_by" in u and "updated_by" in u for u in users)
 
 
 class TestUpdateUser:
@@ -233,3 +272,65 @@ class TestUpdateUser:
         assert response.status_code == 409
         # Unrelated user should not be flagged as a conflict.
         _ = other
+
+    def test_update_tracks_editing_admin(self, client, db_session):
+        target = create_user(db_session, "edited", "edited@example.com")
+        headers = _admin(client, db_session)
+        admin = db_session.scalar(select(User).where(User.username == "root"))
+        assert admin is not None
+
+        response = client.patch(
+            f"/api/users/{target.id}",
+            headers=headers,
+            json={"full_name": "Edited Name", "role": "operator"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["full_name"] == "Edited Name"
+        assert body["role"] == "operator"
+        assert body["updated_by"] == {
+            "id": admin.id,
+            "username": "root",
+            "email": "root@example.com",
+        }
+
+    def test_update_keeps_original_creator(self, client, db_session):
+        creator = create_user(
+            db_session,
+            "creator",
+            "creator@example.com",
+            password=ADMIN_PASSWORD,
+            role=Role.admin,
+        )
+        creator_headers = login_headers(client, "creator", ADMIN_PASSWORD)
+        created = client.post(
+            "/api/users",
+            headers=creator_headers,
+            json={
+                "username": "originated",
+                "email": "originated@example.com",
+                "password": "passw0rd!x",
+            },
+        ).json()
+        assert created["created_by"]["username"] == "creator"
+
+        # A second admin edits the user; the creator must be unchanged.
+        second = create_user(
+            db_session,
+            "editor",
+            "editor@example.com",
+            password=ADMIN_PASSWORD,
+            role=Role.admin,
+        )
+        second_headers = login_headers(client, "editor", ADMIN_PASSWORD)
+        response = client.patch(
+            f"/api/users/{created['id']}",
+            headers=second_headers,
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["created_by"]["username"] == "creator"
+        assert body["updated_by"]["username"] == "editor"

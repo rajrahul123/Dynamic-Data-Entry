@@ -10,6 +10,7 @@ no form-specific tables or columns. All authorization decisions use the
 existing role infrastructure:
 
 * list / detail — any authenticated role (admin, operator, viewer)
+* create (new submissions) — admin or operator (viewer -> 403, anonymous -> 401)
 * update / delete — admin or operator (viewer -> 403, anonymous -> 401)
 
 Validation is fully dynamic: payloads are checked against the live
@@ -127,9 +128,15 @@ def create_submission(
     form_id: int,
     payload: SubmissionCreate,
     db: DbSession,
-    user: CurrentUser,
+    user: CurrentOperator,
 ) -> Submission:
-    """Accept a new submission for a published form (any authenticated role)."""
+    """Accept a new submission for a published form (admin/operator).
+
+    Submission is a write operation, so it is restricted to staff roles:
+    viewers are rejected with 403 and anonymous requests with 401. This stops
+    a viewer role from injecting data even though they can read definitions
+    and records.
+    """
     form = _load_form(db, form_id, load_fields=True)
     _require_accepting_submissions(form)
 

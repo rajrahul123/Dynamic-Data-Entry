@@ -35,6 +35,16 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class UserRef(BaseModel):
+    """Minimal public reference to a user (used for admin tracking)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    email: EmailStr
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,3 +57,5 @@ class UserRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None
+    created_by: UserRef | None
+    updated_by: UserRef | None

@@ -25,7 +25,7 @@ from app.schemas.submission import (
     SubmissionRead,
     SubmissionUpdate,
 )
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import UserCreate, UserRead, UserRef, UserUpdate
 
 __all__ = [
     "AvailableFormRead",
@@ -51,5 +51,6 @@ __all__ = [
     "TokenResponse",
     "UserCreate",
     "UserRead",
+    "UserRef",
     "UserUpdate",
 ]

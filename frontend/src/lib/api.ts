@@ -7,6 +7,12 @@ export interface HealthResponse {
 
 export type Role = 'admin' | 'operator' | 'viewer'
 
+export interface UserRef {
+  id: number
+  username: string
+  email: string
+}
+
 export interface User {
   id: number
   username: string
@@ -17,6 +23,8 @@ export interface User {
   created_at: string
   updated_at: string
   last_login_at: string | null
+  created_by: UserRef | null
+  updated_by: UserRef | null
 }
 
 export interface LoginResponse {

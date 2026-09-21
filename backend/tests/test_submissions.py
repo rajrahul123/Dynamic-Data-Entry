@@ -1,9 +1,9 @@
 """Generic submission endpoint tests.
 
-Covers authentication (any active role may submit), form lifecycle gating,
-dynamic field-type/settings validation, required fields, unknown-key
-rejection, persistence, and cross-form isolation. Everything is driven by
-database FormField definitions — no form-specific code.
+Covers authentication (admin/operator may submit, viewer -> 403), form
+lifecycle gating, dynamic field-type/settings validation, required fields,
+unknown-key rejection, persistence, and cross-form isolation. Everything is
+driven by database FormField definitions — no form-specific code.
 """
 
 from sqlalchemy import select
@@ -124,14 +124,14 @@ class TestSubmissionAuthentication:
 
         assert response.status_code == 201
 
-    def test_viewer_can_submit(self, client, db_session):
+    def test_viewer_cannot_submit_form(self, client, db_session):
         admin = _admin(client, db_session)
         form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS)
         viewer = _headers(client, db_session, "viewer", Role.viewer)
 
         response = _submit(client, viewer, form_id, VALID_EMPLOYEE_DATA)
 
-        assert response.status_code == 201
+        assert response.status_code == 403
 
     def test_viewer_can_fetch_published_definition(self, client, db_session):
         admin = _admin(client, db_session)

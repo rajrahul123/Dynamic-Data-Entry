@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import CurrentAdmin, DbSession, require_admin
 from app.core.security import hash_password
@@ -20,6 +20,17 @@ router = APIRouter(
     tags=["users"],
     dependencies=[Depends(require_admin)],
 )
+
+
+def _load_user(db: Session, user_id: int) -> User | None:
+    return db.scalar(
+        select(User)
+        .where(User.id == user_id)
+        .options(
+            selectinload(User.created_by),
+            selectinload(User.updated_by),
+        )
+    )
 
 
 def _conflict(message: str) -> HTTPException:
@@ -53,11 +64,22 @@ def list_users(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[User]:
-    return list(db.scalars(select(User).order_by(User.id).limit(limit).offset(offset)))
+    return list(
+        db.scalars(
+            select(User)
+            .options(
+                selectinload(User.created_by),
+                selectinload(User.updated_by),
+            )
+            .order_by(User.id)
+            .limit(limit)
+            .offset(offset)
+        )
+    )
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, db: DbSession) -> User:
+def create_user(payload: UserCreate, db: DbSession, admin: CurrentAdmin) -> User:
     _ensure_unique(db, username=payload.username, email=str(payload.email))
 
     user = User(
@@ -67,6 +89,7 @@ def create_user(payload: UserCreate, db: DbSession) -> User:
         full_name=payload.full_name,
         role=payload.role,
         is_active=True,
+        created_by_id=admin.id,
     )
     db.add(user)
     try:
@@ -80,7 +103,7 @@ def create_user(payload: UserCreate, db: DbSession) -> User:
 
 @router.get("/{user_id}", response_model=UserRead)
 def get_user(user_id: int, db: DbSession) -> User:
-    user = db.get(User, user_id)
+    user = _load_user(db, user_id)
     if user is None:
         raise _not_found()
     return user
@@ -120,6 +143,10 @@ def update_user(user_id: int, payload: UserUpdate, db: DbSession, admin: Current
 
     for field, value in changes.items():
         setattr(user, field, value)
+
+    # Record which admin performed the edit for the "last updated by" trail.
+    if changes:
+        user.updated_by_id = admin.id
 
     try:
         db.commit()
