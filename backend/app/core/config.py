@@ -1,8 +1,12 @@
 """Application settings loaded from environment variables and `.env`."""
 
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+PRODUCTION_ENVIRONMENTS = {"production", "prod"}
 
 
 class Settings(BaseSettings):
@@ -19,10 +23,33 @@ class Settings(BaseSettings):
 
     database_url: str | None = None
 
-    cors_origins: list[str] = [
+    cors_origins: Annotated[str | list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value):
+        """Accept ``CORS_ORIGINS`` as a JSON array or a comma-separated string."""
+        if isinstance(value, str):
+            text = value.strip()
+            if text.startswith("[") and text.endswith("]"):
+                text = text[1:-1]
+            value = [
+                item.strip().strip("\"'").strip()
+                for item in text.split(",")
+                if item.strip()
+            ]
+        return value
+
+    @field_validator("cors_origins")
+    @classmethod
+    def _deny_wildcard_origin_in_production(cls, value, info):
+        environment = (info.data.get("environment") or "").lower()
+        if environment in PRODUCTION_ENVIRONMENTS and "*" in value:
+            raise ValueError("CORS_ORIGINS must not contain '*' in production")
+        return value
 
     # JWT authentication
     jwt_secret_key: str

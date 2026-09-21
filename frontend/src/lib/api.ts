@@ -296,6 +296,18 @@ export async function fetchMe(): Promise<User> {
   return request<User>('/api/auth/me')
 }
 
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
+}
+
+export async function changePassword(data: ChangePasswordRequest): Promise<{ detail: string }> {
+  return request<{ detail: string }>('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function listUsers(): Promise<User[]> {
   return request<User[]>('/api/users')
 }

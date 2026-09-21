@@ -1,4 +1,10 @@
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+)
 from app.schemas.form import (
     AvailableFormRead,
     FieldCreate,
@@ -23,6 +29,8 @@ from app.schemas.user import UserCreate, UserRead, UserUpdate
 
 __all__ = [
     "AvailableFormRead",
+    "ChangePasswordRequest",
+    "ChangePasswordResponse",
     "FieldCreate",
     "FieldRead",
     "FieldReorder",

@@ -114,3 +114,90 @@ class TestMe:
         assert body["is_active"] is True
         assert "password_hash" not in body
         assert "password" not in body
+
+
+class TestChangePassword:
+    def test_requires_authentication(self, client):
+        response = client.post(
+            "/api/auth/change-password",
+            json={"current_password": "oldpass123", "new_password": "newpass456"},
+        )
+
+        assert response.status_code == 401
+
+    def test_successful_password_change(self, client, db_session):
+        create_user(db_session, "changer", "changer@example.com", password="oldpass123")
+        headers = login_headers(client, "changer", "oldpass123")
+
+        response = client.post(
+            "/api/auth/change-password",
+            headers=headers,
+            json={"current_password": "oldpass123", "new_password": "newpass456"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["detail"] == "Password updated successfully"
+
+        # The old password no longer works; the new one does.
+        assert client.post(
+            "/api/auth/login", json={"username": "changer", "password": "oldpass123"}
+        ).status_code == 401
+        assert client.post(
+            "/api/auth/login", json={"username": "changer", "password": "newpass456"}
+        ).status_code == 200
+
+    def test_incorrect_current_password_rejected(self, client, db_session):
+        create_user(db_session, "changer2", "changer2@example.com", password="oldpass123")
+        headers = login_headers(client, "changer2", "oldpass123")
+
+        response = client.post(
+            "/api/auth/change-password",
+            headers=headers,
+            json={"current_password": "wrong-password", "new_password": "newpass456"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Incorrect current password"
+
+        # Nothing changed: the existing password still authenticates.
+        assert client.post(
+            "/api/auth/login", json={"username": "changer2", "password": "oldpass123"}
+        ).status_code == 200
+
+    def test_new_password_too_short_rejected(self, client, db_session):
+        create_user(db_session, "changer3", "changer3@example.com", password="oldpass123")
+        headers = login_headers(client, "changer3", "oldpass123")
+
+        response = client.post(
+            "/api/auth/change-password",
+            headers=headers,
+            json={"current_password": "oldpass123", "new_password": "short"},
+        )
+
+        assert response.status_code == 422
+
+    def test_missing_fields_rejected(self, client, db_session):
+        create_user(db_session, "changer4", "changer4@example.com", password="oldpass123")
+        headers = login_headers(client, "changer4", "oldpass123")
+
+        response = client.post(
+            "/api/auth/change-password", headers=headers, json={"new_password": "newpass456"}
+        )
+
+        assert response.status_code == 422
+
+    def test_extra_fields_rejected(self, client, db_session):
+        create_user(db_session, "changer5", "changer5@example.com", password="oldpass123")
+        headers = login_headers(client, "changer5", "oldpass123")
+
+        response = client.post(
+            "/api/auth/change-password",
+            headers=headers,
+            json={
+                "current_password": "oldpass123",
+                "new_password": "newpass456",
+                "role": "admin",
+            },
+        )
+
+        assert response.status_code == 422

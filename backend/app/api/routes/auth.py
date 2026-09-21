@@ -15,7 +15,14 @@ from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models import Role, User
-from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserRead
+from app.schemas import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserRead,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -97,3 +104,29 @@ def login(
 def me(user: CurrentUser) -> User:
     """Return the currently authenticated user."""
     return user
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    db: DbSession,
+    user: CurrentUser,
+) -> ChangePasswordResponse:
+    """Let an authenticated user replace their own password.
+
+    The current password is verified with the stored argon2 hash before the
+    new one is applied; a wrong current password is rejected with a uniform
+    400 so the existing credentials are never disclosed as correct/incorrect
+    in a way that helps an attacker.
+    """
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return ChangePasswordResponse()
