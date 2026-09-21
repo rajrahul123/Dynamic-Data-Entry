@@ -4,21 +4,19 @@ Public registration always creates a Viewer account. The role is never taken
 from the request body: only administrators can assign elevated roles.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from jwt import InvalidTokenError
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.core.email import send_password_reset_email
+from app.core.email import send_password_reset_otp_email
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_access_token,
-    create_password_reset_token,
-    decode_password_reset_token,
+    generate_reset_otp,
     hash_password,
     verify_password,
 )
@@ -148,59 +146,72 @@ def change_password(
 def forgot_password(
     request: Request, response: Response, payload: ForgotPasswordRequest, db: DbSession
 ) -> GenericAuthResponse:
-    """Request a password-reset link for an email address.
+    """Request a 6-digit password-reset code (OTP) for an email address.
 
     The response is deliberately identical whether or not the email exists so
-    the endpoint cannot be used to enumerate accounts. When SMTP is
-    configured a reset link is emailed; otherwise (development only) the link
-    is written to the application log instead.
+    the endpoint cannot be used to enumerate accounts. For an existing account
+    a short-lived OTP is stored (argon2-hashed) and emailed; otherwise nothing
+    is generated and no mail is sent.
     """
-    generic_detail = "If an account exists for that email, a password reset link has been sent."
+    generic_detail = "If an account exists for that email, a password reset code has been sent."
 
     user = db.scalar(select(User).where(User.email == str(payload.email)))
 
     if user is not None:
-        token = create_password_reset_token(str(user.id))
-        reset_link = f"{_settings.frontend_base_url}/reset-password?token={token}"
-        send_password_reset_email(str(user.email), reset_link)
+        otp = generate_reset_otp()
+        user.reset_otp_hash = hash_password(otp)
+        user.reset_otp_expires_at = datetime.now(timezone.utc) + timedelta(
+            minutes=_settings.password_reset_otp_expire_minutes
+        )
+        db.add(user)
+        db.commit()
+        send_password_reset_otp_email(str(user.email), otp)
 
     return GenericAuthResponse(detail=generic_detail)
 
 
 @router.post("/reset-password", response_model=GenericAuthResponse)
+@limiter.limit(_settings.auth_reset_password_rate_limit)
 def reset_password(
-    payload: ResetPasswordRequest, db: DbSession
+    request: Request, response: Response, payload: ResetPasswordRequest, db: DbSession
 ) -> GenericAuthResponse:
-    """Set a new password using a valid, unexpired reset token.
+    """Set a new password using a valid, unexpired 6-digit OTP.
 
-    The token is a short-lived JWT carrying the user id; both its signature
-    and its expiration are verified before the password is replaced.
+    The OTP is verified against the argon2 hash stored on the user's row when
+    the code was requested and must still be within its expiry window. On
+    success the OTP is consumed (single-use). Unknown emails, wrong codes,
+    expired codes, and missing stored codes all return the same message so the
+    endpoint leaks nothing about which accounts exist.
     """
-    try:
-        claims = decode_password_reset_token(payload.token)
-    except InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The reset token is invalid or has expired",
-        )
+    invalid_otp_message = "The reset code is invalid or has expired"
 
-    subject = claims.get("sub")
-    try:
-        user_id = int(subject)
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The reset token is invalid or has expired",
-        )
-
-    user = db.get(User, user_id)
+    user = db.scalar(select(User).where(User.email == str(payload.email)))
     if user is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The reset token is invalid or has expired",
+            status_code=status.HTTP_400_BAD_REQUEST, detail=invalid_otp_message
+        )
+
+    if user.reset_otp_hash is None or user.reset_otp_expires_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=invalid_otp_message
+        )
+
+    if not verify_password(payload.otp, user.reset_otp_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=invalid_otp_message
+        )
+
+    expires_at = user.reset_otp_expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=invalid_otp_message
         )
 
     user.password_hash = hash_password(payload.new_password)
+    user.reset_otp_hash = None
+    user.reset_otp_expires_at = None
     db.add(user)
     db.commit()
 

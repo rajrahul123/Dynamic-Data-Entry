@@ -328,14 +328,15 @@ export async function forgotPassword(email: string): Promise<{ detail: string }>
 }
 
 export async function resetPassword(
-  token: string,
+  email: string,
+  otp: string,
   newPassword: string,
 ): Promise<{ detail: string }> {
   return request<{ detail: string }>(
     '/api/auth/reset-password',
     {
       method: 'POST',
-      body: JSON.stringify({ token, new_password: newPassword }),
+      body: JSON.stringify({ email, otp, new_password: newPassword }),
     },
     false,
   )

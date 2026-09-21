@@ -60,20 +60,19 @@ class Settings(BaseSettings):
     auth_login_rate_limit: str = "5/minute"
     auth_register_rate_limit: str = "3/minute"
     auth_forgot_password_rate_limit: str = "3/minute"
+    auth_reset_password_rate_limit: str = "5/minute"
 
-    # Password-reset flow
-    password_reset_token_expire_minutes: int = 15
-    # Base URL used to build the reset link that is emailed to the user.
-    frontend_base_url: str = "http://localhost:5173"
+    # Password-reset OTP flow
+    password_reset_otp_expire_minutes: int = 10
 
     # SMTP / outbound email. If ``smtp_host`` is left unset the app cannot
-    # deliver mail and instead logs the reset link (dev convenience only);
+    # deliver mail and instead logs the reset OTP (dev convenience only);
     # production deployments must configure a real SMTP relay.
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_user: str | None = None
     smtp_password: str | None = None
-    emails_from_email: EmailStr | None = None
+    emails_from_email: EmailStr | None = "megteach34@gmail.com"
 
 
 @lru_cache

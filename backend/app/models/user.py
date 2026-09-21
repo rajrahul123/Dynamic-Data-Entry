@@ -39,6 +39,10 @@ class User(TimestampMixin, Base):
     updated_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    reset_otp_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reset_otp_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Self-referential admin tracking. `created_by` / `updated_by` resolve the
     # admin who created / last edited this account; the back-populated

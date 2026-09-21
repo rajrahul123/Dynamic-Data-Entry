@@ -1,9 +1,10 @@
-"""Password hashing and JWT utilities.
+"""Password hashing, OTP generation and JWT utilities.
 
 Never store plaintext passwords and never log secrets. All secrets come from
 environment settings, never from code.
 """
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -17,7 +18,6 @@ password_hash = PasswordHash.recommended()
 
 TOKEN_TYPE_FIELD = "type"
 ACCESS_TOKEN_TYPE = "access"
-PASSWORD_RESET_TOKEN_TYPE = "password_reset"
 
 
 def hash_password(password: str) -> str:
@@ -58,40 +58,15 @@ def decode_access_token(token: str) -> dict[str, Any]:
     return payload
 
 
-def create_password_reset_token(
-    subject: str, expires_delta: timedelta | None = None
-) -> str:
-    """Create a short-lived, single-purpose JWT for password reset.
+def generate_reset_otp(digits: int = 6) -> str:
+    """Generate a cryptographically strong, fixed-width numeric OTP.
 
-    The token carries the user id in ``sub`` and an explicit ``type`` claim so
-    it can never be mistaken for (or replayed as) an access token.
+    Uses ``secrets.randbelow`` so the value is uniformly distributed and
+    unpredictable. Leading zeros are dropped, which keeps every code exactly
+    ``digits`` characters long.
     """
-    settings = get_settings()
-    now = datetime.now(timezone.utc)
-    expire = now + (
-        expires_delta
-        or timedelta(minutes=settings.password_reset_token_expire_minutes)
-    )
-    payload: dict[str, Any] = {
-        "sub": subject,
-        "type": PASSWORD_RESET_TOKEN_TYPE,
-        "iat": now,
-        "exp": expire,
-    }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
-
-
-def decode_password_reset_token(token: str) -> dict[str, Any]:
-    """Decode and validate a password-reset JWT.
-
-    Raises ``jwt.InvalidTokenError`` for expired, malformed, tampered, or
-    wrong-purpose tokens (e.g. an access token must not be usable to reset a
-    password).
-    """
-    settings = get_settings()
-    payload = jwt.decode(
-        token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-    )
-    if payload.get(TOKEN_TYPE_FIELD) != PASSWORD_RESET_TOKEN_TYPE:
-        raise InvalidTokenError("Invalid token type")
-    return payload
+    if digits < 1:
+        raise ValueError("OTP length must be at least 1 digit")
+    lower_bound = 10 ** (digits - 1)
+    upper_bound = 10**digits - 1
+    return f"{secrets.randbelow(upper_bound - lower_bound + 1) + lower_bound:0{digits}d}"
