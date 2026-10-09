@@ -51,9 +51,10 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
-      # Public URL of the backend, copied from its RENDER_EXTERNAL_URL.
+      # Host of the backend web service (e.g. dynamic-data-backend.onrender.com).
+      # The frontend prefixes the API requests with `https://` at runtime.
       - key: VITE_API_BASE_URL
         fromService:
           type: web
           name: dynamic-data-backend
-          envVarKey: RENDER_EXTERNAL_URL
+          property: host

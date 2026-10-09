@@ -180,6 +180,15 @@ export interface ValidationErrorDetail {
 
 const TOKEN_KEY = 'ddep_access_token'
 
+function resolveApiBaseUrl(): string {
+  const raw = import.meta.env.VITE_API_BASE_URL?.trim()
+  if (!raw) return ''
+  const withScheme = /^https?:\/\//.test(raw) ? raw : `https://${raw}`
+  return withScheme.replace(/\/+$/, '')
+}
+
+export const API_BASE_URL = resolveApiBaseUrl()
+
 export class ApiError extends Error {
   status: number
   detail: unknown
@@ -215,7 +224,7 @@ async function request<T>(
     if (token) headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response = await fetch(path, { ...options, headers })
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
 
   if (response.status === 204) {
     return undefined as T
@@ -492,7 +501,7 @@ export async function exportSubmissions(
   params.set('format', format)
   const token = getToken()
   const response = await fetch(
-    `/api/forms/${formId}/submissions/export?${params.toString()}`,
+    `${API_BASE_URL}/api/forms/${formId}/submissions/export?${params.toString()}`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   )
   return readExportResponse(response, `records.${format}`)
@@ -504,7 +513,7 @@ export async function exportSingleRecordPdf(
 ): Promise<ExportResult> {
   const token = getToken()
   const response = await fetch(
-    `/api/forms/${formId}/submissions/${submissionId}/export?format=pdf`,
+    `${API_BASE_URL}/api/forms/${formId}/submissions/${submissionId}/export?format=pdf`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   )
   return readExportResponse(response, `record-${submissionId}.pdf`)
