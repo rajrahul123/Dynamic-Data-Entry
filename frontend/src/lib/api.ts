@@ -183,8 +183,14 @@ const TOKEN_KEY = 'ddep_access_token'
 function resolveApiBaseUrl(): string {
   const raw = import.meta.env.VITE_API_BASE_URL?.trim()
   if (!raw) return ''
-  const withScheme = /^https?:\/\//.test(raw) ? raw : `https://${raw}`
-  return withScheme.replace(/\/+$/, '')
+
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)
+  const host = hasScheme ? raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '') : raw
+
+  const isBareHost = !host.includes('.onrender.com') && !host.startsWith('localhost')
+  const resolved = isBareHost ? `${host}.onrender.com` : host
+
+  return (hasScheme ? raw : `https://${resolved}`).replace(/\/+$/, '')
 }
 
 export const API_BASE_URL = resolveApiBaseUrl()
