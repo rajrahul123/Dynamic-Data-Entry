@@ -56,8 +56,7 @@ function initialSettings(field: FormField): FieldSettings {
   return field.settings ? { ...emptySettings(), ...field.settings } : emptySettings()
 }
 
-const panelInput =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none'
+const panelInput = 'input'
 
 export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorPanelProps) {
   // The parent remounts this panel with `key={field.id}`, so state below is
@@ -184,7 +183,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
   const isSelectLike = draft.field_type === 'select' || draft.field_type === 'radio'
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="card">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900">Edit field</h3>
         <button
@@ -199,7 +198,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
 
       <div className="mt-4 space-y-4">
         <label className="block">
-          <span className="text-xs font-medium text-slate-600">Label</span>
+          <span className="label">Label</span>
           <input
             className={`mt-1 ${panelInput}`}
             value={draft.label}
@@ -208,7 +207,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-600">Field key</span>
+          <span className="label">Field key</span>
           <input
             className={`mt-1 font-mono ${panelInput}`}
             value={draft.field_key}
@@ -223,7 +222,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-600">Field type</span>
+          <span className="label">Field type</span>
           <select
             className={`mt-1 ${panelInput}`}
             value={draft.field_type}
@@ -238,7 +237,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-600">Description (optional)</span>
+          <span className="label">Description (optional)</span>
           <input
             className={`mt-1 ${panelInput}`}
             value={draft.description}
@@ -248,7 +247,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
 
         {isSelectLike && (
           <div>
-            <span className="text-xs font-medium text-slate-600">Options</span>
+            <span className="label">Options</span>
             <div className="mt-2 space-y-2">
               {(settings.options ?? []).map((option, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -278,7 +277,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
             <button
               type="button"
               onClick={addOption}
-              className="mt-2 rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              className="btn btn-secondary btn-sm mt-2"
             >
               + Add option
             </button>
@@ -287,7 +286,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
 
         {draft.field_type === 'checkbox' && (
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Checkbox label</span>
+            <span className="label">Checkbox label</span>
             <input
               className={`mt-1 ${panelInput}`}
               value={settings.checkbox_label ?? ''}
@@ -302,7 +301,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
         {draft.field_type === 'number' && (
           <div className="grid grid-cols-3 gap-2">
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">Min</span>
+              <span className="label">Min</span>
               <input
                 type="number"
                 className={`mt-1 ${panelInput}`}
@@ -313,7 +312,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">Max</span>
+              <span className="label">Max</span>
               <input
                 type="number"
                 className={`mt-1 ${panelInput}`}
@@ -324,7 +323,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">Step</span>
+              <span className="label">Step</span>
               <input
                 type="number"
                 className={`mt-1 ${panelInput}`}
@@ -343,7 +342,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
           draft.field_type === 'phone') && (
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">Min length</span>
+              <span className="label">Min length</span>
               <input
                 type="number"
                 className={`mt-1 ${panelInput}`}
@@ -354,7 +353,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">Max length</span>
+              <span className="label">Max length</span>
               <input
                 type="number"
                 className={`mt-1 ${panelInput}`}
@@ -368,7 +367,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
         )}
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-600">Placeholder (optional)</span>
+          <span className="label">Placeholder (optional)</span>
           <input
             className={`mt-1 ${panelInput}`}
             value={draft.placeholder}
@@ -377,7 +376,7 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-600">Default value (optional)</span>
+          <span className="label">Default value (optional)</span>
           <input
             className={`mt-1 font-mono ${panelInput}`}
             value={draft.default_value}
@@ -395,13 +394,13 @@ export function FieldEditorPanel({ field, busy, onSave, onDelete }: FieldEditorP
           Required field
         </label>
 
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="banner-error">{error}</p>}
 
         <button
           type="button"
           disabled={busy || saving}
-          onClick={handleApply}
-          className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          onClick={() => void handleApply()}
+          className="btn btn-primary w-full"
         >
           {saving ? 'Applying…' : 'Apply changes'}
         </button>

@@ -323,7 +323,7 @@ fall back to the base font without crashing.
 ```bash
 cd backend
 .venv\Scripts\activate
-python -m pytest                # auth, authorization, user, form-builder, submission, record-management, record-query, and export tests (304 passing)
+python -m pytest                # auth, authorization, user, form-builder, submission, record-management, record-query, and export tests (365 passing)
 ```
 
 ## Current project status

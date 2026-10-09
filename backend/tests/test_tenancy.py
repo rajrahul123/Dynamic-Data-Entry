@@ -4,7 +4,7 @@ Every self-signup (and every ``create_user`` without an explicit tenant)
 lands in its own organization. These tests verify that neither reads nor
 writes can cross that boundary: one tenant's forms, users, and records are
 completely invisible (404 / empty list) to another tenant, even when both
-tenants hold elevated roles and active subscriptions.
+tenants hold elevated roles.
 """
 
 from sqlalchemy import select

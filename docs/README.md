@@ -120,7 +120,7 @@ executable template system** — layout comes only from the form definition.
   archived 200, nonexistent/cross-form 404, unsupported format 400), and bulk
   (one record per page, single/empty edge cases, search/filter/sort,
   ignored limit-offset, distinct filenames, archived, over-limit 400 for
-  `pdf-form` and other formats). Full suite: **304 passing** (SQLite).
+  `pdf-form` and other formats). Full suite: **365 passing** (SQLite).
 - **PostgreSQL verification:** 28 live checks against the real PostgreSQL
   database (per `backend/.env`), exercising the HTTP API with a throwaway
   admin + forms + submissions and FK-safe cleanup (submissions → forms →

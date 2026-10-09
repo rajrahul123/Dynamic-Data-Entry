@@ -89,6 +89,27 @@ class TestLogin:
         assert response.status_code == 200
         assert response.json()["access_token"]
 
+    def test_login_with_email_case_insensitive(self, client, db_session):
+        create_user(db_session, "caseuser", "caseuser@Example.COM", password="secret123")
+
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "caseuser@example.com", "password": "secret123"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["access_token"]
+
+    def test_login_with_email_wrong_password(self, client, db_session):
+        create_user(db_session, "mailw", "mailw@example.com", password="secret123")
+
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "mailw@example.com", "password": "wrong-password"},
+        )
+
+        assert response.status_code == 401
+
     def test_login_invalid_password(self, client, db_session):
         create_user(db_session, "alice", "alice@example.com", password="secret123")
 

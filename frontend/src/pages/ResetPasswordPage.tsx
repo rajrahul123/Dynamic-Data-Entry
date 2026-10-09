@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
+import { AuthShell } from '../components/AuthShell'
 import { PasswordField } from '../components/PasswordField'
 import { ApiError, forgotPassword, resetPassword } from '../lib/api'
 import { useAuth } from '../lib/auth-context'
+import { useToast } from '../lib/toast-context'
 
 interface FieldErrors {
   otp?: string
@@ -13,6 +15,7 @@ interface FieldErrors {
 
 function ResetPasswordPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const prefilledEmail = searchParams.get('email') ?? ''
@@ -69,9 +72,7 @@ function ResetPasswordPage() {
     setError(null)
     try {
       await resetPassword(email.trim(), otp, newPassword)
-      setOtp('')
-      setNewPassword('')
-      setConfirmPassword('')
+      toast('success', 'Password reset. Please sign in with your new password.')
       navigate('/login', { replace: true, state: { reset: true } })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : String(err))
@@ -80,143 +81,124 @@ function ResetPasswordPage() {
     }
   }
 
-  const inputClass =
-    'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none'
-
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
-      {!codeSent ? (
-        <form
-          onSubmit={handleRequestCode}
-          noValidate
-          className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
-        >
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Reset your password</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Enter your account email and we will send you a 6-digit code.
-          </p>
+    <AuthShell>
+      <div className="card p-8 shadow-xl ring-1 ring-white/10">
+        {!codeSent ? (
+          <form onSubmit={handleRequestCode} noValidate>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Reset your password
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Enter your account email and we will send you a 6-digit code.
+            </p>
 
-          <label className="mt-6 block text-xs font-medium text-slate-600" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className={inputClass}
-          />
+            <label className="label mt-6" htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="input"
+            />
 
-          {error && (
-            <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-          )}
+            {error && <p className="banner-error mt-4">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={submitting || !email.trim()}
-            className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-          >
-            {submitting ? 'Sending…' : 'Send code'}
-          </button>
-
-          <p className="mt-4 text-center text-sm text-slate-500">
-            Remembered it?{' '}
-            <Link
-              to="/login"
-              className="font-medium text-slate-900 underline-offset-4 hover:underline"
-            >
-              Sign in
-            </Link>
-          </p>
-        </form>
-      ) : (
-        <form
-          onSubmit={handleSubmit}
-          noValidate
-          className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
-        >
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Enter your code</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            We sent a 6-digit code to <span className="font-medium text-slate-700">{email}</span>{' '}
-            (valid for 10 minutes). Enter it below with a new password.
-          </p>
-
-          <label className="mt-6 block text-xs font-medium text-slate-600" htmlFor="otp">
-            Verification code
-          </label>
-          <input
-            id="otp"
-            type="text"
-            required
-            maxLength={6}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            value={otp}
-            onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            className={inputClass}
-          />
-          <p className="mt-1 text-xs text-slate-500">6 digits — XXXXXX.</p>
-          {errors.otp && <p className="mt-1 text-xs text-red-600">{errors.otp}</p>}
-
-          <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="newPassword">
-            New password
-          </label>
-          <PasswordField
-            id="newPassword"
-            required
-            autoComplete="new-password"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            className={inputClass}
-          />
-          <p className="mt-1 text-xs text-slate-500">At least 8 characters.</p>
-          {errors.newPassword && <p className="mt-1 text-xs text-red-600">{errors.newPassword}</p>}
-
-          <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="confirmPassword">
-            Confirm new password
-          </label>
-          <PasswordField
-            id="confirmPassword"
-            required
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            className={inputClass}
-          />
-          {errors.confirmPassword && (
-            <p className="mt-1 text-xs text-red-600">{errors.confirmPassword}</p>
-          )}
-
-          {error && (
-            <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-          >
-            {submitting ? 'Resetting…' : 'Reset Password'}
-          </button>
-
-          <p className="mt-4 text-center text-sm text-slate-500">
             <button
-              type="button"
-              onClick={() => {
-                setCodeSent(false)
-                setOtp('')
-                setError(null)
-              }}
-              className="font-medium text-slate-700 underline-offset-4 hover:underline"
+              type="submit"
+              disabled={submitting || !email.trim()}
+              className="btn btn-primary btn-lg mt-6 w-full"
             >
-              Use a different email
+              {submitting ? 'Sending…' : 'Send code'}
             </button>
-          </p>
-        </form>
-      )}
-    </main>
+
+            <p className="mt-6 text-center text-sm text-slate-500">
+              Remembered it?{' '}
+              <Link to="/login" className="link">
+                Sign in
+              </Link>
+            </p>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} noValidate>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Enter your code</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              We sent a 6-digit code to <span className="font-medium text-slate-700">{email}</span>{' '}
+              (valid for 10 minutes). Enter it below with a new password.
+            </p>
+
+            <label className="label mt-6" htmlFor="otp">
+              Verification code
+            </label>
+            <input
+              id="otp"
+              type="text"
+              required
+              maxLength={6}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="••••••"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              className={errors.otp ? 'input border-red-400' : 'input'}
+            />
+            {errors.otp && <p className="field-error">{errors.otp}</p>}
+
+            <label className="label mt-4" htmlFor="newPassword">
+              New password
+            </label>
+            <PasswordField
+              id="newPassword"
+              required
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              className={errors.newPassword ? 'input border-red-400' : 'input'}
+            />
+            {errors.newPassword && <p className="field-error">{errors.newPassword}</p>}
+
+            <label className="label mt-4" htmlFor="confirmPassword">
+              Confirm new password
+            </label>
+            <PasswordField
+              id="confirmPassword"
+              required
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              className={errors.confirmPassword ? 'input border-red-400' : 'input'}
+            />
+            {errors.confirmPassword && (
+              <p className="field-error">{errors.confirmPassword}</p>
+            )}
+
+            {error && <p className="banner-error mt-4">{error}</p>}
+
+            <button type="submit" disabled={submitting} className="btn btn-primary btn-lg mt-6 w-full">
+              {submitting ? 'Resetting…' : 'Reset password'}
+            </button>
+
+            <p className="mt-6 text-center text-sm text-slate-500">
+              <button
+                type="button"
+                onClick={() => {
+                  setCodeSent(false)
+                  setOtp('')
+                  setError(null)
+                }}
+                className="link"
+              >
+                Use a different email
+              </button>
+            </p>
+          </form>
+        )}
+      </div>
+    </AuthShell>
   )
 }
 

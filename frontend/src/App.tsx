@@ -16,7 +16,6 @@ import { RecordsPage } from './pages/RecordsPage'
 import RegistrationPage from './pages/RegistrationPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import { SubmissionPage } from './pages/SubmissionPage'
-import { UsersPage } from './pages/UsersPage'
 
 function App() {
   return (
@@ -35,38 +34,9 @@ function App() {
             }
           >
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route
-              path="/users"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <UsersPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/forms"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <FormsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/forms/new"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <FormCreatePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/forms/:id/edit"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <FormBuilderPage />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/forms" element={<FormsPage />} />
+            <Route path="/forms/new" element={<FormCreatePage />} />
+            <Route path="/forms/:id/edit" element={<FormBuilderPage />} />
             <Route path="/forms/:id/submit" element={<SubmissionPage />} />
             <Route path="/records" element={<RecordsIndexPage />} />
             <Route path="/forms/:id/records" element={<RecordsPage />} />

@@ -130,15 +130,18 @@ class TestUpdateForm:
         assert response.json()["name"] == "New name"
         assert response.json()["description"] is None
 
-    def test_published_form_cannot_be_edited(self, client, db_session):
+    def test_published_form_can_be_edited(self, client, db_session):
         headers = _admin(client, db_session)
         form = _create_form(client, headers, "Locked")
         _add_field(client, headers, form["id"], {"field_key": "x", "label": "X", "field_type": "text"})
         client.post(f"/api/forms/{form['id']}/publish", headers=headers)
 
-        response = client.patch(f"/api/forms/{form['id']}", headers=headers, json={"name": "Hacked"})
+        response = client.patch(f"/api/forms/{form['id']}", headers=headers, json={"name": "Renamed live"})
 
-        assert response.status_code == 409
+        assert response.status_code == 200
+        body = response.json()
+        assert body["name"] == "Renamed live"
+        assert body["status"] == "published"
 
     def test_update_unknown_form_returns_404(self, client, db_session):
         headers = _admin(client, db_session)
@@ -196,14 +199,17 @@ class TestFormLifecycle:
 
         assert response.status_code == 409
 
-    def test_archived_form_cannot_be_edited_or_published(self, client, db_session):
+    def test_archived_form_can_be_edited_but_not_published(self, client, db_session):
         headers = _admin(client, db_session)
         form = _create_form(client, headers, "Gone")
         client.post(f"/api/forms/{form['id']}/archive", headers=headers)
 
-        assert client.patch(
+        response = client.patch(
             f"/api/forms/{form['id']}", headers=headers, json={"name": "Zombie"}
-        ).status_code == 409
+        )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == "Zombie"
         assert client.post(f"/api/forms/{form['id']}/publish", headers=headers).status_code == 409
 
     def test_only_draft_forms_can_be_deleted(self, client, db_session):
@@ -360,7 +366,7 @@ class TestCreateField:
         )
         assert response.status_code == 422
 
-    def test_fields_cannot_be_added_to_published_form(self, client, db_session):
+    def test_fields_can_be_added_to_published_form(self, client, db_session):
         headers = _admin(client, db_session)
         form = _create_form(client, headers)
         _add_field(client, headers, form["id"], {"field_key": "x", "label": "X", "field_type": "text"})
@@ -372,7 +378,8 @@ class TestCreateField:
             json={"field_key": "y", "label": "Y", "field_type": "text"},
         )
 
-        assert response.status_code == 409
+        assert response.status_code == 201
+        assert response.json()["field_key"] == "y"
 
     def test_field_on_unknown_form_returns_404(self, client, db_session):
         headers = _admin(client, db_session)
@@ -445,7 +452,7 @@ class TestUpdateField:
 
         assert response.status_code == 409
 
-    def test_update_field_on_published_form_rejected(self, client, db_session):
+    def test_update_field_on_published_form_allowed(self, client, db_session):
         headers = _admin(client, db_session)
         form = _create_form(client, headers)
         field = _add_field(client, headers, form["id"], {"field_key": "a", "label": "A", "field_type": "text"})
@@ -457,7 +464,8 @@ class TestUpdateField:
             json={"label": "X"},
         )
 
-        assert response.status_code == 409
+        assert response.status_code == 200
+        assert response.json()["label"] == "X"
 
     def test_update_unknown_field_returns_404(self, client, db_session):
         headers = _admin(client, db_session)
@@ -483,7 +491,7 @@ class TestDeleteField:
             select(FormField).where(FormField.id == field["id"])
         ) is None
 
-    def test_delete_field_on_published_form_rejected(self, client, db_session):
+    def test_delete_field_on_published_form_allowed(self, client, db_session):
         headers = _admin(client, db_session)
         form = _create_form(client, headers)
         field = _add_field(client, headers, form["id"], {"field_key": "a", "label": "A", "field_type": "text"})
@@ -493,7 +501,10 @@ class TestDeleteField:
             f"/api/forms/{form['id']}/fields/{field['id']}", headers=headers
         )
 
-        assert response.status_code == 409
+        assert response.status_code == 204
+        assert db_session.scalar(
+            select(FormField).where(FormField.id == field["id"])
+        ) is None
 
 
 class TestReorderFields:
@@ -557,7 +568,7 @@ class TestReorderFields:
 
         assert response.status_code == 400
 
-    def test_reorder_on_published_form_rejected(self, client, db_session):
+    def test_reorder_on_published_form_allowed(self, client, db_session):
         headers = _admin(client, db_session)
         form, fields = self._form_with_three_fields(client, headers)
         client.post(f"/api/forms/{form['id']}/publish", headers=headers)
@@ -568,7 +579,8 @@ class TestReorderFields:
             json={"field_ids": [f["id"] for f in fields]},
         )
 
-        assert response.status_code == 409
+        assert response.status_code == 200
+        assert [f["id"] for f in response.json()] == [fields[0]["id"], fields[1]["id"], fields[2]["id"]]
 
 
 class TestFormsAndFieldsSecurity:

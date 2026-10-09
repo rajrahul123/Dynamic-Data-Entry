@@ -1,22 +1,36 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
-import {
-  ApiError,
-  changePassword,
-  checkout,
-  fetchSubscription,
-  type PlanType,
-  type Subscription,
-} from '../lib/api'
+import { ApiError, changePassword } from '../lib/api'
 import { useAuth } from '../lib/auth-context'
+import { useToast } from '../lib/toast-context'
 import { PasswordField } from './PasswordField'
+import {
+  IconChevronDown,
+  IconDashboard,
+  IconForms,
+  IconLogout,
+  IconMenu,
+  IconRecords,
+  IconSettings,
+  IconX,
+} from './icons'
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
-  return [
-    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-    isActive ? 'bg-white text-slate-900' : 'text-slate-300 hover:bg-slate-700 hover:text-white',
-  ].join(' ')
+  return `nav-item ${isActive ? 'nav-item-active' : 'nav-item-idle'}`
+}
+
+function pageSubtitle(pathname: string): string {
+  if (pathname.startsWith('/records')) return 'Records'
+  if (pathname.startsWith('/forms/new')) return 'New form'
+  if (pathname.startsWith('/forms')) return 'Forms'
+  if (pathname.startsWith('/dashboard')) return 'Overview'
+  return 'Workspace'
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2)
+  return parts.map((part) => part.charAt(0).toUpperCase()).join('') || '?'
 }
 
 interface PasswordFieldErrors {
@@ -27,7 +41,12 @@ interface PasswordFieldErrors {
 
 export function AppShell() {
   const { user, logout } = useAuth()
-  const navigate = useNavigate()
+  const { toast } = useToast()
+  const location = useLocation()
+
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement | null>(null)
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
@@ -38,41 +57,29 @@ export function AppShell() {
   const [passwordSaved, setPasswordSaved] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const [subscription, setSubscription] = useState<Subscription | null>(null)
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
-  const [upgradeOpen, setUpgradeOpen] = useState(false)
-  const [upgrading, setUpgrading] = useState(false)
-  const [upgradeError, setUpgradeError] = useState<string | null>(null)
-
   useEffect(() => {
-    let cancelled = false
-    fetchSubscription()
-      .then((data) => {
-        if (!cancelled) setSubscription(data)
-      })
-      .catch((err) => {
-        if (cancelled) return
-        if (err instanceof ApiError && err.status === 404) {
-          setSubscription({
-            plan_type: 'free',
-            status: 'active',
-            expires_at: null,
-            provider_customer_id: null,
-          })
-          return
-        }
-        setSubscriptionError(err instanceof Error ? err.message : String(err))
-      })
-    return () => {
-      cancelled = true
+    if (!userMenuOpen) return
+    function onPointerDown(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false)
+      }
     }
-  }, [])
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setUserMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [userMenuOpen])
 
   if (!user) return null
 
   function handleLogout() {
     logout()
-    navigate('/login', { replace: true })
+    window.location.assign('/login')
   }
 
   function validatePasswordForm(): PasswordFieldErrors {
@@ -102,7 +109,8 @@ export function AppShell() {
       setNewPassword('')
       setConfirmPassword('')
       setPasswordSaved(true)
-      window.setTimeout(() => setPasswordModalOpen(false), 1200)
+      toast('success', 'Password updated successfully.')
+      window.setTimeout(() => setPasswordModalOpen(false), 900)
     } catch (err) {
       setPasswordError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : String(err))
     } finally {
@@ -117,103 +125,166 @@ export function AppShell() {
     setPasswordSaved(false)
   }
 
-  const passwordInputClass =
-    'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none'
+  const displayName = user.full_name || user.username
+
+  const navItems = [
+    { to: '/dashboard', label: 'Dashboard', icon: IconDashboard },
+    { to: '/forms', label: 'Forms', icon: IconForms },
+    { to: '/records', label: 'Records', icon: IconRecords },
+  ]
+
+  const closeSidebar = () => setSidebarOpen(false)
+
+  const sidebarContent = (
+    <>
+      <div className="flex h-16 items-center gap-2 px-5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white shadow-sm">
+          D
+        </span>
+        <span className="text-sm font-bold tracking-tight text-slate-900">
+          DataEntry Pro
+        </span>
+      </div>
+
+      <nav className="mt-4 flex-1 space-y-1 px-3">
+        {navItems.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={navLinkClass}
+            end={to === '/dashboard'}
+            onClick={closeSidebar}
+          >
+            <Icon className="h-5 w-5" />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+    </>
+  )
 
   return (
     <div className="min-h-screen">
-      <nav className="bg-slate-800 text-slate-100">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-6 py-3">
-          <span className="text-sm font-semibold tracking-tight">
-            Dynamic Data Entry Platform
-          </span>
-          <div className="flex flex-1 items-center gap-1">
-            <NavLink to="/dashboard" className={navLinkClass}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/records" className={navLinkClass}>
-              Records
-            </NavLink>
-            {user.role === 'admin' && (
-              <>
-                <NavLink to="/forms" className={navLinkClass}>
-                  Forms
-                </NavLink>
-                <NavLink to="/users" className={navLinkClass}>
-                  Users
-                </NavLink>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs text-slate-400">
-              {subscription && (
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                    subscription.plan_type === 'free'
-                      ? 'bg-slate-700 text-slate-300'
-                      : 'bg-emerald-700 text-emerald-100'
-                  }`}
-                  title={subscription.status}
-                >
-                  {subscription.plan_type}
-                </span>
-              )}
-              {user.full_name || user.username}
-              <span className="ml-1 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] uppercase text-slate-200">
-                {user.role}
-              </span>
-            </span>
-            {subscriptionError && (
-              <span className="text-[10px] text-red-400" title={subscriptionError}>
-                plan: unavailable
-              </span>
-            )}
-            {user.role === 'admin' && (
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200/70 bg-white lg:flex">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile sidebar */}
+      {sidebarOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <aside className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white lg:hidden">
+            <button
+              type="button"
+              aria-label="Close menu"
+              onClick={() => setSidebarOpen(false)}
+              className="absolute right-3 top-4 rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <IconX className="h-5 w-5" />
+            </button>
+            {sidebarContent}
+          </aside>
+        </>
+      )}
+
+      <div className="lg:pl-60">
+        {/* Header */}
+        <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/85 backdrop-blur">
+          <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setUpgradeOpen(true)}
-                className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-slate-600"
+                aria-label="Open menu"
+                onClick={() => setSidebarOpen(true)}
+                className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
               >
-                Manage Plan
+                <IconMenu className="h-5 w-5" />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setPasswordModalOpen(true)}
-              className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-slate-600"
-            >
-              Change Password
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg bg-slate-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-500"
-            >
-              Logout
-            </button>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {pageSubtitle(location.pathname)}
+                </p>
+                <p className="text-xs text-slate-500">Dynamic Data Entry Platform</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-slate-100"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+                    {initials(displayName)}
+                  </span>
+                  <span className="hidden text-left md:block">
+                    <span className="block text-xs font-semibold text-slate-900">
+                      {displayName}
+                    </span>
+                    <span className="block text-[11px] text-slate-500">{user.email}</span>
+                  </span>
+                  <IconChevronDown className="hidden h-4 w-4 text-slate-400 md:block" />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+                    <div className="border-b border-slate-100 px-3 py-3">
+                      <p className="text-sm font-semibold text-slate-900">{displayName}</p>
+                      <p className="truncate text-xs text-slate-500">{user.email}</p>
+                    </div>
+                    <div className="p-1">
+                      <button
+                        type="button"
+                        className="dropdown-item"
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          setPasswordModalOpen(true)
+                        }}
+                      >
+                        <IconSettings className="h-4 w-4 text-slate-500" />
+                        Change password
+                      </button>
+                      <button
+                        type="button"
+                        className="dropdown-item text-red-600 hover:bg-red-50 hover:text-red-700"
+                        onClick={handleLogout}
+                      >
+                        <IconLogout className="h-4 w-4" />
+                        Log out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </nav>
-      <main className="mx-auto max-w-5xl px-6 py-8">
-        <Outlet />
-      </main>
+        </header>
+
+        <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+          <Outlet />
+        </main>
+      </div>
 
       {passwordModalOpen && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 px-6"
-          onClick={closePasswordModal}
-        >
+        <div className="modal-backdrop" onClick={closePasswordModal}>
           <form
             onSubmit={handleChangePassword}
             noValidate
-            className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-lg"
+            className="modal max-w-sm"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="text-lg font-bold tracking-tight text-slate-900">Change password</h2>
             <p className="mt-1 text-sm text-slate-500">Update the password for {user.username}.</p>
 
-            <label className="mt-5 block text-xs font-medium text-slate-600" htmlFor="currentPassword">
+            <label className="label mt-5" htmlFor="currentPassword">
               Current password
             </label>
             <PasswordField
@@ -221,13 +292,13 @@ export function AppShell() {
               autoComplete="current-password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
-              className={passwordInputClass}
+              className="input"
             />
             {passwordErrors.currentPassword && (
-              <p className="mt-1 text-xs text-red-600">{passwordErrors.currentPassword}</p>
+              <p className="field-error">{passwordErrors.currentPassword}</p>
             )}
 
-            <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="newPassword">
+            <label className="label mt-4" htmlFor="newPassword">
               New password
             </label>
             <PasswordField
@@ -235,13 +306,13 @@ export function AppShell() {
               autoComplete="new-password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
-              className={passwordInputClass}
+              className="input"
             />
             {passwordErrors.newPassword && (
-              <p className="mt-1 text-xs text-red-600">{passwordErrors.newPassword}</p>
+              <p className="field-error">{passwordErrors.newPassword}</p>
             )}
 
-            <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="confirmPassword">
+            <label className="label mt-4" htmlFor="confirmPassword">
               Confirm new password
             </label>
             <PasswordField
@@ -249,21 +320,15 @@ export function AppShell() {
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              className={passwordInputClass}
+              className="input"
             />
             {passwordErrors.confirmPassword && (
-              <p className="mt-1 text-xs text-red-600">{passwordErrors.confirmPassword}</p>
+              <p className="field-error">{passwordErrors.confirmPassword}</p>
             )}
 
-            {passwordError && (
-              <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                {passwordError}
-              </p>
-            )}
+            {passwordError && <p className="banner-error mt-4">{passwordError}</p>}
             {passwordSaved && (
-              <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                Password updated successfully.
-              </p>
+              <p className="banner-success mt-4">Password updated successfully.</p>
             )}
 
             <div className="mt-6 flex justify-end gap-3">
@@ -271,87 +336,15 @@ export function AppShell() {
                 type="button"
                 onClick={closePasswordModal}
                 disabled={submitting}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-              >
-                {submitting ? 'Updating…' : 'Update Password'}
+              <button type="submit" disabled={submitting} className="btn btn-primary">
+                {submitting ? 'Updating…' : 'Update password'}
               </button>
             </div>
           </form>
-        </div>
-      )}
-    {upgradeOpen && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 px-6"
-          onClick={() => setUpgradeOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="text-lg font-bold tracking-tight text-slate-900">Manage plan</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Your workspace runs on the{' '}
-              <span className="font-semibold text-slate-700">
-                {subscription?.plan_type ?? 'free'}
-              </span>{' '}
-              plan. Choose a paid plan to unlock form builder, data entry and exports.
-            </p>
-
-            {upgradeError && (
-              <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                {upgradeError}
-              </p>
-            )}
-
-            <div className="mt-5 space-y-3">
-              {(['monthly', 'yearly'] as PlanType[]).map((plan) => (
-                <button
-                  key={plan}
-                  type="button"
-                  disabled={upgrading}
-                  onClick={async () => {
-                    setUpgrading(true)
-                    setUpgradeError(null)
-                    try {
-                      const result = await checkout(plan)
-                      setSubscription(result.subscription)
-                      if (result.checkout_url) {
-                        window.location.href = result.checkout_url
-                      } else {
-                        setUpgradeOpen(false)
-                      }
-                    } catch (err) {
-                      setUpgradeError(err instanceof Error ? err.message : String(err))
-                    } finally {
-                      setUpgrading(false)
-                    }
-                  }}
-                  className="flex w-full items-center justify-between rounded-lg border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <span className="capitalize">{plan}</span>
-                  <span className="text-slate-400">{plan === 'monthly' ? '$19 / mo' : '$190 / yr'}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setUpgradeOpen(false)}
-                disabled={upgrading}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Close
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

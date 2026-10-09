@@ -27,14 +27,12 @@ export function FormCreatePage() {
 
   if (error) {
     return (
-      <div className="space-y-4">
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          Could not create the form: {error}
-        </p>
+      <div className="page">
+        <p className="banner-error">Could not create the form: {error}</p>
         <button
           type="button"
           onClick={() => navigate('/forms')}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          className="btn btn-secondary"
         >
           ← Back to forms
         </button>
@@ -42,7 +40,12 @@ export function FormCreatePage() {
     )
   }
 
-  return <p className="text-sm text-slate-500">Creating form…</p>
+  return (
+    <div className="page flex items-center gap-3 text-sm text-slate-500">
+      <span className="skeleton h-5 w-5 shrink-0 rounded-full" aria-hidden />
+      Creating form…
+    </div>
+  )
 }
 
 export default FormCreatePage

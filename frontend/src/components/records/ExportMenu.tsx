@@ -2,6 +2,7 @@ import { type JSX, useState } from 'react'
 
 import { type AppliedQuery } from './QueryToolbar'
 import { exportSubmissions, type ExportFormat } from '../../lib/api'
+import { IconDownload, IconSpinner } from '../icons'
 
 const FORMATS: { format: ExportFormat; label: string; description: string }[] = [
   { format: 'csv', label: 'CSV', description: 'Spreadsheet compatible' },
@@ -59,9 +60,19 @@ export function ExportMenu({ formId, query, disabled = false, onError, onNotice 
         type="button"
         disabled={disabled || busyFormat !== null}
         onClick={() => setOpen((current) => !current)}
-        className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        className="btn btn-secondary btn-sm"
       >
-        {busyFormat !== null ? 'Exporting…' : 'Export'}
+        {busyFormat !== null ? (
+          <>
+            <IconSpinner className="h-4 w-4" />
+            Exporting {busyFormat.toUpperCase()}…
+          </>
+        ) : (
+          <>
+            <IconDownload className="h-4 w-4" />
+            Export
+          </>
+        )}
       </button>
 
       {open && (
@@ -82,7 +93,7 @@ export function ExportMenu({ formId, query, disabled = false, onError, onNotice 
                 type="button"
                 disabled={busyFormat !== null}
                 onClick={() => void handleExport(format)}
-                className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left hover:bg-slate-50 disabled:opacity-50"
+                className="flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 disabled:opacity-50"
               >
                 <span className="text-sm font-medium text-slate-800">{label}</span>
                 <span className="text-xs text-slate-400">{description}</span>

@@ -9,8 +9,7 @@ Multi-tenancy: every test database starts with a single default tenant that
 ``create_user`` attaches to, so helpers/forms/submissions created in different
 sessions of one test remain visible to each other. Tests that exercise
 cross-tenant *isolation* create their own ``Tenant`` explicitly and pass it to
-``create_user``. ``create_user`` also provisions an active paid subscription on
-the tenant by default, keeping the subscription gate out of ordinary tests.
+``create_user``.
 """
 
 import os
@@ -32,17 +31,8 @@ from app.core.database import get_db  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import (  # noqa: E402
-    Base,
-    PlanType,
-    Role,
-    Subscription,
-    SubscriptionStatus,
-    Tenant,
-    User,
-)
+from app.models import Base, Role, Tenant, User  # noqa: E402
 
-from datetime import datetime, timedelta, timezone  # noqa: E402
 from weakref import WeakKeyDictionary  # noqa: E402
 
 _DEFAULT_TENANTS: WeakKeyDictionary = WeakKeyDictionary()
@@ -118,13 +108,8 @@ def create_user(
     role: Role = Role.viewer,
     is_active: bool = True,
     tenant: Tenant | None = None,
-    plan: PlanType | None = PlanType.monthly,
 ) -> User:
-    """Create a user, attaching it to ``tenant`` (or the shared default).
-
-    Unless ``plan`` is ``None`` an active subscription is also created for the
-    user in that tenant, with ``PlanType.free`` available for gating tests.
-    """
+    """Create a user, attaching it to ``tenant`` (or the shared default)."""
     tenant = tenant or _default_tenant(db_session)
     user = User(
         username=username,
@@ -138,22 +123,6 @@ def create_user(
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
-
-    if plan is not None:
-        db_session.add(
-            Subscription(
-                tenant_id=user.tenant_id,
-                user_id=user.id,
-                plan_type=plan,
-                status=SubscriptionStatus.active,
-                expires_at=(
-                    datetime.now(timezone.utc) + timedelta(days=30)
-                    if plan is not PlanType.free
-                    else None
-                ),
-            )
-        )
-        db_session.commit()
     return user
 
 

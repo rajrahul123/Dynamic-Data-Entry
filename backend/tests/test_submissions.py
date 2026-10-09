@@ -495,6 +495,32 @@ class TestPersistence:
         )
         assert stored.data == VALID_EMPLOYEE_DATA
 
+    def test_editing_published_form_preserves_existing_submissions(self, client, db_session):
+        admin = _admin(client, db_session)
+        form_id = _create_form(client, admin, fields=EMPLOYEE_FIELDS)
+        submitted = _submit(client, admin, form_id, VALID_EMPLOYEE_DATA)
+        assert submitted.status_code == 201
+        record_id = submitted.json()["id"]
+
+        rename = client.patch(
+            f"/api/forms/{form_id}", headers=admin, json={"name": "Renamed live"}
+        )
+        assert rename.status_code == 200
+        added = client.post(
+            f"/api/forms/{form_id}/fields",
+            headers=admin,
+            json={"field_key": "manager_email", "label": "Manager Email", "field_type": "email"},
+        )
+        assert added.status_code == 201
+
+        record = client.get(f"/api/forms/{form_id}/submissions/{record_id}", headers=admin)
+        assert record.status_code == 200
+        assert record.json()["data"] == VALID_EMPLOYEE_DATA
+
+        listed = client.get(f"/api/forms/{form_id}/submissions", headers=admin)
+        assert listed.status_code == 200
+        assert listed.json()["total"] == 1
+
 
 class TestIsolation:
     def test_submission_cannot_use_another_forms_keys(self, client, db_session):

@@ -11,7 +11,7 @@ management API.
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession
@@ -24,7 +24,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.models import PlanType, Role, Subscription, SubscriptionStatus, Tenant, User
+from app.models import Role, Tenant, User
 from app.schemas import (
     ChangePasswordRequest,
     ChangePasswordResponse,
@@ -63,11 +63,11 @@ def register(
     """Create a self-registered account and provision its own organization.
 
     Public registration always creates an ``admin`` account: the registrant
-    becomes the administrator of the ``Tenant`` that is provisioned for them
-    (with a free plan), so from the first login they can build forms, run data
-    entry, export, and invite their own team. The role is never taken from the
-    request body; elevating or changing roles for teammates is restricted to
-    tenant admins through the user-management endpoint.
+    becomes the administrator of the ``Tenant`` that is provisioned for them,
+    so from the first login they can build forms, run data entry, export, and
+    invite their own team. The role is never taken from the request body;
+    elevating or changing roles for teammates is restricted to tenant admins
+    through the user-management endpoint.
     """
     if db.scalar(select(User).where(User.username == payload.username)) is not None:
         raise _conflict("Username is already taken")
@@ -91,14 +91,6 @@ def register(
     db.add(user)
     db.flush()
 
-    db.add(
-        Subscription(
-            tenant_id=tenant.id,
-            user_id=user.id,
-            plan_type=PlanType.free,
-            status=SubscriptionStatus.active,
-        )
-    )
     try:
         db.commit()
     except IntegrityError:
@@ -113,9 +105,13 @@ def register(
 def login(
     request: Request, response: Response, payload: LoginRequest, db: DbSession
 ) -> TokenResponse:
+    identifier = payload.username
     user = db.scalar(
         select(User).where(
-            or_(User.username == payload.username, User.email == payload.username)
+            or_(
+                User.username == identifier,
+                func.lower(User.email) == identifier.lower(),
+            )
         )
     )
 

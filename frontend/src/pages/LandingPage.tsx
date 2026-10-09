@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { fetchPlans, type Plan } from '../lib/api'
 import { useAuth } from '../lib/auth-context'
 
 const FEATURES = [
@@ -31,30 +29,9 @@ export function LandingPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [plans, setPlans] = useState<Plan[]>([])
-  const [plansError, setPlansError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchPlans()
-      .then((data) => {
-        if (!cancelled) setPlans(data)
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setPlansError(err instanceof Error ? err.message : String(err))
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   function handleCta() {
     navigate(user ? '/dashboard' : '/register')
   }
-
-  const orderedPlans = [...plans].sort((a, b) => a.price_usd - b.price_usd)
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -131,52 +108,6 @@ export function LandingPage() {
             >
               <h3 className="text-base font-semibold">{feature.title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">{feature.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-5xl px-6 pb-20">
-        <h2 className="text-center text-2xl font-bold tracking-tight">Simple, public pricing</h2>
-        <p className="mt-2 text-center text-sm text-slate-500">
-          Start free. Upgrade when your team needs more.
-        </p>
-
-        {plansError && (
-          <p className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-center text-sm text-red-700">
-            Could not load plans: {plansError}
-          </p>
-        )}
-
-        <div className="mt-8 grid gap-6 sm:grid-cols-3">
-          {orderedPlans.map((plan) => (
-            <div
-              key={plan.key}
-              className={`flex flex-col rounded-xl border bg-white p-6 ${
-                plan.key === 'monthly' ? 'border-slate-900 shadow-md' : 'border-slate-200'
-              }`}
-            >
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                {plan.name}
-              </h3>
-              <p className="mt-3 text-3xl font-extrabold tracking-tight">
-                ${plan.price_usd}
-                <span className="text-sm font-medium text-slate-400">
-                  {plan.key === 'yearly' ? ' / year' : plan.key === 'monthly' ? ' / month' : ''}
-                </span>
-              </p>
-              <p className="mt-3 flex-1 text-sm leading-6 text-slate-600">{plan.description}</p>
-              <button
-                type="button"
-                onClick={() => navigate(user ? '/dashboard' : '/register')}
-                className={`mt-6 rounded-lg px-4 py-2.5 text-sm font-semibold ${
-                  plan.key === 'free'
-                    ? 'border border-slate-300 text-slate-700 hover:bg-slate-50'
-                    : 'bg-slate-900 text-white hover:bg-slate-700'
-                }`}
-              >
-                {plan.key === 'free' ? 'Start free' : 'Choose plan'}
-              </button>
             </div>
           ))}
         </div>

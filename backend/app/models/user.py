@@ -75,9 +75,6 @@ class User(TimestampMixin, Base):
         passive_deletes=True,
     )
 
-    subscriptions: Mapped[list["Subscription"]] = relationship(
-        back_populates="user", passive_deletes=True
-    )
     tenant: Mapped["Tenant"] = relationship(back_populates="users")
 
     submissions: Mapped[list["Submission"]] = relationship(

@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 
+import { AuthShell } from '../components/AuthShell'
 import { PasswordField } from '../components/PasswordField'
 import { ApiError, register } from '../lib/api'
 import { useAuth } from '../lib/auth-context'
+import { useToast } from '../lib/toast-context'
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,50}$/
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PASSWORD_MIN_LENGTH = 8
 
 interface FieldErrors {
   fullName?: string
@@ -18,6 +21,7 @@ interface FieldErrors {
 
 function RegistrationPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
 
   const [fullName, setFullName] = useState('')
@@ -46,8 +50,8 @@ function RegistrationPage() {
       next.email = 'Enter a valid email address.'
     }
 
-    if (password.length < 8) {
-      next.password = 'Password must be at least 8 characters long.'
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      next.password = `Password must be at least ${PASSWORD_MIN_LENGTH} characters long.`
     }
 
     if (confirmPassword !== password) {
@@ -89,6 +93,7 @@ function RegistrationPage() {
         email: email.trim(),
         password,
       })
+      toast('success', 'Account created. Sign in to get started.')
       navigate('/login', { replace: true, state: { registered: true } })
     } catch (err) {
       if (err instanceof ApiError) {
@@ -102,119 +107,134 @@ function RegistrationPage() {
     }
   }
 
-  const inputClass =
-    'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none'
+  const passwordStrength =
+    password.length === 0
+      ? 0
+      : password.length >= PASSWORD_MIN_LENGTH
+        ? 100
+        : password.length / PASSWORD_MIN_LENGTH
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
-      <form
-        onSubmit={handleSubmit}
-        noValidate
-        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
-      >
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">
-          Dynamic Data Entry Platform
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">Create your account</p>
-
-        <label className="mt-6 block text-xs font-medium text-slate-600" htmlFor="fullName">
-          Full name
-        </label>
-        <input
-          id="fullName"
-          type="text"
-          required
-          autoComplete="name"
-          value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
-          className={inputClass}
-        />
-        {errors.fullName && <p className="mt-1 text-xs text-red-600">{errors.fullName}</p>}
-
-        <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="username">
-          Username
-        </label>
-        <input
-          id="username"
-          type="text"
-          required
-          autoComplete="username"
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
-          className={inputClass}
-        />
-        {errors.username && <p className="mt-1 text-xs text-red-600">{errors.username}</p>}
-
-        <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="email">
-          Email
-        </label>
-        <input
-          id="email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className={inputClass}
-        />
-        {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
-
-        <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="password">
-          Password
-        </label>
-        <PasswordField
-          id="password"
-          required
-          autoComplete="new-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className={inputClass}
-        />
-        <p className="mt-1 text-xs text-slate-500">At least 8 characters.</p>
-        {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
-
-        <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor="confirmPassword">
-          Confirm password
-        </label>
-        <PasswordField
-          id="confirmPassword"
-          required
-          autoComplete="new-password"
-          value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
-          className={inputClass}
-        />
-        {errors.confirmPassword && (
-          <p className="mt-1 text-xs text-red-600">{errors.confirmPassword}</p>
-        )}
-
-        <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-          New accounts are created with Viewer access.
+    <AuthShell>
+      <div className="card p-8 shadow-xl ring-1 ring-white/10">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Create your account</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Start with a private workspace for your team.
         </p>
 
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-        )}
+        <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
+          <div>
+            <label className="label" htmlFor="fullName">
+              Full name
+            </label>
+            <input
+              id="fullName"
+              type="text"
+              required
+              autoComplete="name"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              className={errors.fullName ? 'input border-red-400' : 'input'}
+            />
+            {errors.fullName && <p className="field-error">{errors.fullName}</p>}
+          </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-        >
-          {submitting ? 'Creating account…' : 'Create Account'}
-        </button>
+          <div>
+            <label className="label" htmlFor="username">
+              Username
+            </label>
+            <input
+              id="username"
+              type="text"
+              required
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              className={errors.username ? 'input border-red-400' : 'input'}
+            />
+            {errors.username && <p className="field-error">{errors.username}</p>}
+          </div>
 
-        <p className="mt-4 text-center text-sm text-slate-500">
+          <div>
+            <label className="label" htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className={errors.email ? 'input border-red-400' : 'input'}
+            />
+            {errors.email && <p className="field-error">{errors.email}</p>}
+          </div>
+
+          <div>
+            <label className="label" htmlFor="password">
+              Password
+            </label>
+            <PasswordField
+              id="password"
+              required
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className={errors.password ? 'input border-red-400' : 'input'}
+            />
+            {password.length > 0 && (
+              <div
+                className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100"
+                aria-hidden="true"
+              >
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    passwordStrength >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'
+                  }`}
+                  style={{ width: `${passwordStrength}%` }}
+                />
+              </div>
+            )}
+            <p className="field-error">{errors.password}</p>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="confirmPassword">
+              Confirm password
+            </label>
+            <PasswordField
+              id="confirmPassword"
+              required
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              className={errors.confirmPassword ? 'input border-red-400' : 'input'}
+            />
+            {errors.confirmPassword && (
+              <p className="field-error">{errors.confirmPassword}</p>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-500">
+            You&apos;ll get your own private workspace when you sign up.
+          </p>
+
+          {error && <p className="banner-error">{error}</p>}
+
+          <button type="submit" disabled={submitting} className="btn btn-primary btn-lg w-full">
+            {submitting ? 'Creating account…' : 'Create Account'}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-slate-500">
           Already have an account?{' '}
-          <Link
-            to="/login"
-            className="font-medium text-slate-900 underline-offset-4 hover:underline"
-          >
+          <Link to="/login" className="link">
             Login
           </Link>
         </p>
-      </form>
-    </main>
+      </div>
+    </AuthShell>
   )
 }
 

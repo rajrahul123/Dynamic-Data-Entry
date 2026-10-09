@@ -24,10 +24,12 @@ import {
   type FieldUpdate,
   type Form,
 } from '../lib/api'
+import { IconX } from '../components/icons'
 import { FieldEditorPanel } from '../components/forms/FieldEditorPanel'
 import { FieldPalette } from '../components/forms/FieldPalette'
 import { FormPreview } from '../components/forms/FormPreview'
 import { SortableFieldCard } from '../components/forms/SortableFieldCard'
+import { useToast } from '../lib/toast-context'
 
 function slugify(value: string): string {
   return value
@@ -48,12 +50,14 @@ function uniqueKey(existing: string[], base: string): string {
 export function FormBuilderPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const formId = Number(id)
 
   const [form, setForm] = useState<Form | null>(null)
   const [nameInput, setNameInput] = useState('')
   const [descriptionInput, setDescriptionInput] = useState('')
   const [selectedFieldId, setSelectedFieldId] = useState<number | null>(null)
+  const [confirmDeleteField, setConfirmDeleteField] = useState<Form['fields'][number] | null>(null)
   const [loading, setLoading] = useState(true)
   const [executing, setExecuting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,7 +94,7 @@ export function FormBuilderPage() {
     [form, selectedFieldId],
   )
 
-  const readonly = form !== null && form.status !== 'draft'
+  const isLive = form !== null && form.status !== 'draft'
 
   async function run(action: () => Promise<unknown>, successMessage: string) {
     setError(null)
@@ -99,8 +103,11 @@ export function FormBuilderPage() {
     try {
       await action()
       setNotice(successMessage)
+      toast('success', successMessage)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+      toast('error', message)
     } finally {
       setExecuting(false)
     }
@@ -116,7 +123,18 @@ export function FormBuilderPage() {
       setForm(updated)
       setNameInput(updated.name)
       setDescriptionInput(updated.description ?? '')
-    }, 'Form details saved.')
+    }, 'Form updated successfully.')
+  }
+
+  async function handleSaveAndExit() {
+    if (!form) return
+    await run(async () => {
+      await updateForm(form.id, {
+        name: nameInput,
+        description: descriptionInput || null,
+      })
+    }, 'Form updated successfully.')
+    navigate('/forms')
   }
 
   async function handleAddField(type: FieldType) {
@@ -154,21 +172,20 @@ export function FormBuilderPage() {
     }, 'Field updated.')
   }
 
-  async function handleDeleteField() {
-    if (!form || !selectedField) return
-    if (!window.confirm(`Delete field "${selectedField.label}"?`)) return
+  async function handleDeleteField(field: typeof selectedField) {
+    if (!form || !field) return
     await run(async () => {
-      await deleteField(form.id, selectedField.id)
+      await deleteField(form.id, field.id)
       setForm((previous) =>
         previous
           ? {
               ...previous,
-              fields: previous.fields.filter((field) => field.id !== selectedField.id),
+              fields: previous.fields.filter((candidate) => candidate.id !== field.id),
             }
           : previous,
       )
-      setSelectedFieldId(null)
-    }, 'Field deleted.')
+      if (selectedFieldId === field.id) setSelectedFieldId(null)
+    }, `Field "${field.label}" deleted.`)
   }
 
   async function handlePublish() {
@@ -204,27 +221,34 @@ export function FormBuilderPage() {
     try {
       await reorderFields(form.id, orderedFields.map((field) => field.id))
       setNotice('Field order saved.')
+      toast('success', 'Field order saved.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+      toast('error', message)
       const data = await fetchForm(form.id)
       setForm(data)
     }
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading form…</p>
+    return (
+      <div className="page space-y-3">
+        <span className="skeleton block h-8 w-40" />
+        <span className="skeleton block h-36 w-full" />
+        <span className="skeleton block h-24 w-full" />
+      </div>
+    )
   }
 
   if (!form) {
     return (
-      <div className="space-y-4">
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error ?? 'Could not load the form.'}
-        </p>
+      <div className="page">
+        <p className="banner-error">{error ?? 'Could not load the form.'}</p>
         <button
           type="button"
           onClick={() => navigate('/forms')}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          className="btn btn-secondary"
         >
           ← Back to forms
         </button>
@@ -232,53 +256,48 @@ export function FormBuilderPage() {
     )
   }
 
+  const statusClass =
+    form.status === 'published'
+      ? 'tag-emerald'
+      : form.status === 'archived'
+        ? 'tag-slate'
+        : 'tag-amber'
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="page">
+      <header className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => navigate('/forms')}
-          className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          className="btn btn-ghost btn-sm"
         >
           ← Back to forms
         </button>
-        <span
-          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-            form.status === 'published'
-              ? 'bg-emerald-100 text-emerald-700'
-              : form.status === 'archived'
-                ? 'bg-slate-200 text-slate-600'
-                : 'bg-slate-100 text-slate-600'
-          }`}
-        >
-          {form.status}
-        </span>
-      </div>
+        <span className={`tag ${statusClass}`}>{form.status}</span>
+      </header>
 
-      {readonly && (
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          This form is {form.status}. Its definition is locked and cannot be changed. To modify
-          it, create a new form or repurpose a draft.
+      {isLive && (
+        <p className="banner-info">
+          Editing a {form.status} form will update the form template for future submissions.
+          Existing records are preserved.
         </p>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="card">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Form name</span>
+            <span className="label">Form name</span>
             <input
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
+              className="input"
               value={nameInput}
-              disabled={readonly}
               onChange={(event) => setNameInput(event.target.value)}
             />
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Description (optional)</span>
+            <span className="label">Description (optional)</span>
             <input
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
+              className="input"
               value={descriptionInput}
-              disabled={readonly}
               onChange={(event) => setDescriptionInput(event.target.value)}
             />
           </label>
@@ -287,19 +306,28 @@ export function FormBuilderPage() {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={readonly || executing}
-            onClick={handleSaveMeta}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+            disabled={executing}
+            onClick={() => void handleSaveMeta()}
+            className="btn btn-primary"
           >
-            {executing ? 'Saving…' : 'Save details'}
+            {executing ? 'Saving…' : 'Save Changes'}
+          </button>
+
+          <button
+            type="button"
+            disabled={executing}
+            onClick={() => void handleSaveAndExit()}
+            className="btn btn-secondary"
+          >
+            Save &amp; exit
           </button>
 
           {form.status === 'draft' && (
             <button
               type="button"
               disabled={executing || form.fields.length === 0}
-              onClick={handlePublish}
-              className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+              onClick={() => void handlePublish()}
+              className="btn border border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
               title={
                 form.fields.length === 0
                   ? 'Add at least one field before publishing.'
@@ -314,26 +342,21 @@ export function FormBuilderPage() {
             <button
               type="button"
               disabled={executing}
-              onClick={handleArchive}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              onClick={() => void handleArchive()}
+              className="btn btn-secondary"
             >
               Archive
             </button>
           )}
         </div>
 
-        {error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        {notice && (
-          <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            {notice}
-          </p>
-        )}
+        {error && <p className="mt-4 banner-error">{error}</p>}
+        {notice && <p className="mt-4 banner-success">{notice}</p>}
       </section>
 
-      {!readonly && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="space-y-4">
-            <FieldPalette onAddField={handleAddField} busy={executing} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-4">
+          <FieldPalette onAddField={handleAddField} busy={executing} />
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-900">Fields</h3>
@@ -374,7 +397,7 @@ export function FormBuilderPage() {
                 field={selectedField}
                 busy={executing}
                 onSave={handleSaveField}
-                onDelete={handleDeleteField}
+                onDelete={() => handleDeleteField(selectedField)}
               />
             ) : (
               <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-400">
@@ -383,16 +406,66 @@ export function FormBuilderPage() {
             )}
           </div>
         </div>
-      )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900">Preview</h3>
-        <p className="mb-4 mt-0.5 text-xs text-slate-500">
-          How this form renders for a submitter. Required rules and per-type validation apply at
-          submission and record edit time.
-        </p>
-        <FormPreview fields={form.fields} />
-      </section>
+        <section className="card">
+          <h3 className="text-sm font-semibold text-slate-900">Preview</h3>
+          <p className="mb-4 mt-0.5 text-xs text-slate-500">
+            How this form renders for a submitter. Required rules and per-type validation apply at
+            submission and record edit time.
+          </p>
+          <FormPreview fields={form.fields} />
+        </section>
+
+      {confirmDeleteField && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-field-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="delete-field-title" className="text-lg font-semibold text-slate-900">
+                  Delete field
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Delete "{confirmDeleteField.label}" from this form? This action cannot be
+                  undone.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setConfirmDeleteField(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <IconX className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteField(null)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={executing}
+                onClick={() => {
+                  void handleDeleteField(confirmDeleteField)
+                  setConfirmDeleteField(null)
+                }}
+                className="btn btn-danger"
+              >
+                {executing ? 'Deleting…' : 'Delete field'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

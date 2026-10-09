@@ -33,22 +33,6 @@ export interface LoginResponse {
   token_type: string
 }
 
-export interface UserCreate {
-  username: string
-  email: string
-  password: string
-  full_name?: string | null
-  role?: Role
-}
-
-export interface UserUpdate {
-  email?: string
-  full_name?: string | null
-  password?: string
-  role?: Role
-  is_active?: boolean
-}
-
 export type FormStatus = 'draft' | 'published' | 'archived'
 
 export type FieldType =
@@ -343,24 +327,6 @@ export async function resetPassword(
   )
 }
 
-export async function listUsers(): Promise<User[]> {
-  return request<User[]>('/api/users')
-}
-
-export async function createUser(data: UserCreate): Promise<User> {
-  return request<User>('/api/users', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  })
-}
-
-export async function updateUser(id: number, patch: UserUpdate): Promise<User> {
-  return request<User>(`/api/users/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(patch),
-  })
-}
-
 export async function listForms(options?: { status?: FormStatus }): Promise<Form[]> {
   const query = options?.status ? `?status=${options.status}` : ''
   return request<Form[]>(`/api/forms${query}`)
@@ -449,43 +415,6 @@ export interface SubmissionQueryOptions {
 }
 
 export type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'sql' | 'pdf-form'
-
-export type PlanType = 'free' | 'monthly' | 'yearly'
-export type SubscriptionStatus = 'active' | 'inactive' | 'expired' | 'canceled'
-
-export interface Plan {
-  key: PlanType
-  name: string
-  description: string
-  price_usd: number
-}
-
-export interface Subscription {
-  plan_type: PlanType
-  status: SubscriptionStatus
-  expires_at: string | null
-  provider_customer_id: string | null
-}
-
-export interface CheckoutResponse {
-  checkout_url: string | null
-  subscription: Subscription
-}
-
-export async function fetchPlans(): Promise<Plan[]> {
-  return request<Plan[]>('/api/billing/plans', {}, false)
-}
-
-export async function fetchSubscription(): Promise<Subscription> {
-  return request<Subscription>('/api/subscription')
-}
-
-export async function checkout(plan: PlanType): Promise<CheckoutResponse> {
-  return request<CheckoutResponse>('/api/subscription/checkout', {
-    method: 'POST',
-    body: JSON.stringify({ plan }),
-  })
-}
 
 export interface ExportResult {
   blob: Blob

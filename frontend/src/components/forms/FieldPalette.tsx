@@ -7,7 +7,7 @@ interface FieldPaletteProps {
 
 export function FieldPalette({ onAddField, busy }: FieldPaletteProps) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="card">
       <h3 className="text-sm font-semibold text-slate-900">Field types</h3>
       <p className="mt-0.5 text-xs text-slate-500">Click a type to add it to the form.</p>
       <div className="mt-3 grid grid-cols-2 gap-2">

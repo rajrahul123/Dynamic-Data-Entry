@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../lib/auth-context'
+import { useToast } from '../lib/toast-context'
 import {
   type Form,
   type FormField,
@@ -31,6 +32,7 @@ export function RecordsPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { toast } = useToast()
   const formId = Number(id)
 
   const [form, setForm] = useState<Form | null>(null)
@@ -134,7 +136,7 @@ export function RecordsPage() {
       } else {
         await load(page, query)
       }
-      setNotice(`Record #${record.id} deleted.`)
+      toast('success', `Record #${record.id} deleted.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -170,12 +172,12 @@ export function RecordsPage() {
   if (!form) return null
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
+    <div className="page">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">{form.name}</h2>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(form.status)}`}>
+            <span className={`tag ${statusBadgeClass(form.status)}`}>
               {form.status}
             </span>
           </div>
@@ -186,24 +188,24 @@ export function RecordsPage() {
               ` · showing the first ${tableColumns.length} columns`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExportMenu
             formId={formId}
             query={query}
             disabled={loading}
-            onError={setError}
-            onNotice={setNotice}
+            onError={(message) => toast('error', message)}
+            onNotice={(message) => toast('success', message)}
           />
           <Link
             to="/records"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="btn btn-secondary btn-sm"
           >
             All records
           </Link>
           {form.status === 'published' && (
             <Link
               to={`/forms/${formId}/submit`}
-              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+              className="btn btn-primary btn-sm"
             >
               + Enter data
             </Link>
@@ -211,32 +213,28 @@ export function RecordsPage() {
         </div>
       </header>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {notice && (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p>
-      )}
+      {error && <p className="banner-error">{error}</p>}
+      {notice && <p className="banner-success">{notice}</p>}
 
       <QueryToolbar form={form} query={query} onApply={applyQuery} />
 
       {loading && <p className="text-xs text-slate-400">Loading…</p>}
 
-      <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
+      <section className="table-wrap">
+        <table className="table-sticky">
           <thead>
-            <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
+            <tr>
               {tableColumns.map((field) => (
-                <th key={field.id} className="px-4 py-3 font-medium">
-                  {field.label}
-                </th>
+                <th key={field.id}>{field.label}</th>
               ))}
-              <th className="px-4 py-3 font-medium">Submitted</th>
-              <th className="px-4 py-3 font-medium">Actions</th>
+              <th>Submitted</th>
+              <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {records.length === 0 ? (
               <tr>
-                <td colSpan={tableColumns.length + 2} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={tableColumns.length + 2} className="table-empty">
                   {query.search || (query.filters?.length ?? 0) > 0
                     ? 'No records match your search or filters.'
                     : 'No records yet.'}
@@ -244,21 +242,21 @@ export function RecordsPage() {
               </tr>
             ) : (
               records.map((record) => (
-                <tr key={record.id} className="border-b border-slate-100 last:border-0">
+                <tr key={record.id} className="table-row-hover">
                   {tableColumns.map((field) => (
-                    <td key={field.id} className="max-w-56 truncate px-4 py-3 text-slate-800">
+                    <td key={field.id} className="max-w-56 truncate text-slate-800">
                       {cellValue(field, record)}
                     </td>
                   ))}
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                  <td className="whitespace-nowrap text-xs text-slate-500">
                     {new Date(record.submitted_at).toLocaleString()}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="flex items-center gap-1.5">
+                  <td>
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
                         type="button"
                         onClick={() => navigate(`/forms/${formId}/records/${record.id}`)}
-                        className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        className="btn btn-secondary btn-sm"
                       >
                         View
                       </button>
@@ -267,7 +265,7 @@ export function RecordsPage() {
                           <button
                             type="button"
                             onClick={() => navigate(`/forms/${formId}/records/${record.id}/edit`)}
-                            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            className="btn btn-secondary btn-sm"
                           >
                             Edit
                           </button>
@@ -275,7 +273,7 @@ export function RecordsPage() {
                             type="button"
                             disabled={deletingId === record.id}
                             onClick={() => void handleDelete(record)}
-                            className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            className="btn btn-danger btn-sm"
                           >
                             Delete
                           </button>
@@ -290,7 +288,7 @@ export function RecordsPage() {
         </table>
       </section>
 
-      <div className="flex items-center justify-between text-sm text-slate-600">
+      <div className="flex flex-col items-start justify-between gap-3 text-sm text-slate-600 sm:flex-row sm:items-center">
         <p>
           Showing {records.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
           {Math.min(page * PAGE_SIZE, total)} of {total}
@@ -300,7 +298,7 @@ export function RecordsPage() {
             type="button"
             disabled={page <= 1}
             onClick={() => void turnPage(page - 1)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="btn btn-secondary btn-sm"
           >
             Previous
           </button>
@@ -311,7 +309,7 @@ export function RecordsPage() {
             type="button"
             disabled={page >= totalPages}
             onClick={() => void turnPage(page + 1)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="btn btn-secondary btn-sm"
           >
             Next
           </button>

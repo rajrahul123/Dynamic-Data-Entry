@@ -12,6 +12,19 @@ import {
 } from '../lib/api'
 import { validateSubmission } from '../lib/submissionValidation'
 
+function defaultValuesFor(fields: Form['fields']): Record<string, unknown> {
+  const initial: Record<string, unknown> = {}
+  for (const field of fields) {
+    if (field.default_value !== null && field.default_value !== '') {
+      initial[field.field_key] =
+        field.field_type === 'checkbox'
+          ? field.default_value === 'true'
+          : field.default_value
+    }
+  }
+  return initial
+}
+
 export function SubmissionPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -51,16 +64,7 @@ export function SubmissionPage() {
         const data = await fetchFormDefinition(formId)
         if (cancelled) return
         setForm(data)
-        const initial: Record<string, unknown> = {}
-        for (const field of data.fields) {
-          if (field.default_value !== null && field.default_value !== '') {
-            initial[field.field_key] =
-              field.field_type === 'checkbox'
-                ? field.default_value === 'true'
-                : field.default_value
-          }
-        }
-        setValues(initial)
+        setValues(defaultValuesFor(data.fields))
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err))
       } finally {
@@ -119,6 +123,7 @@ export function SubmissionPage() {
             <button
               type="button"
               onClick={() => {
+                setValues(defaultValuesFor(form?.fields ?? []))
                 setSubmission(null)
                 setFieldErrors({})
                 setFormError(null)
