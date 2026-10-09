@@ -23,6 +23,23 @@ class Settings(BaseSettings):
 
     database_url: str | None = None
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_url(cls, value):
+        """Select the installed psycopg 3 driver for managed Postgres URLs.
+
+        Providers such as Render inject plain ``postgres://`` or
+        ``postgresql://`` connection strings. SQLAlchemy would then default to
+        the psycopg2 DBAPI, which this project does not install, so rewrite the
+        scheme to ``postgresql+psycopg://``.
+        """
+        if isinstance(value, str):
+            if value.startswith("postgres://"):
+                return "postgresql+psycopg://" + value[len("postgres://"):]
+            if value.startswith("postgresql://"):
+                return "postgresql+psycopg://" + value[len("postgresql://"):]
+        return value
+
     cors_origins: Annotated[str | list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

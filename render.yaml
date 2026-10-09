@@ -1,0 +1,59 @@
+# Render.com Blueprint: Postgres + FastAPI backend + Vite frontend, all-in-one.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# NOTE: Render hands out Postgres connection strings as `postgresql://...`.
+# The backend requires the psycopg 3 driver, so `app/core/config.py` rewrites
+# that scheme to `postgresql+psycopg://...` at load time.
+
+databases:
+  - name: dynamic-db
+    databaseName: entrydb
+    user: entryuser
+    plan: free
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend API (FastAPI + Alembic migrations)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: dynamic-data-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      # Full connection string injected by the `dynamic-db` database above.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dynamic-db
+          property: connectionString
+      # Random JWT signing secret, generated once by Render.
+      # (The app reads this as JWT_SECRET_KEY; a plain SECRET_KEY is ignored.)
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      # Wildcard CORS is only accepted while ENVIRONMENT is not "production".
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: ENVIRONMENT
+        value: development
+      - key: DEBUG
+        value: "false"
+
+  # ---------------------------------------------------------------------------
+  # Frontend (Vite static site)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: dynamic-data-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      # Public URL of the backend, copied from its RENDER_EXTERNAL_URL.
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: dynamic-data-backend
+          envVarKey: RENDER_EXTERNAL_URL
